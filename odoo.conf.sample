@@ -1,4 +1,31 @@
 [options]
+; Admin password for managing databases
+admin_passwd = ${ADMIN_PASSWD}
+
+; Database connection settings (Dynamically set using environment variables)
+db_host = ${DB_HOST}
+db_port = ${DB_PORT}
+db_user = ${DB_USER}
+db_password = ${DB_PASSWORD}
+dbfilter = ${DB_FILTER}
+
+; Enable listing multiple databases
+list_db = ${LIST_DB}
+
+; Odoo server settings
+http_port = ${ODOO_PORT}
+
+; Addons path
+addons_path = /mnt/extra-addons
+
+; SMTP settings (if needed)
+email_from = ${EMAIL_FROM}
+smtp_server = ${SMTP_SERVER}
+smtp_port = ${SMTP_PORT}
+smtp_user = ${SMTP_USER}
+smtp_password = ${SMTP_PASSWORD}
+
+
 ; This is the password that allows database operations:
 ; admin_passwd = admin
 ;db_host = db
