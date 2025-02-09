@@ -49,6 +49,13 @@ verify_database() {
         return 1
     fi
     echo "✓ Odoo tables verified"
+
+    echo "5. Updating credentials..."
+    if ! docker exec -i ${tenant}_db psql -U $user -d $tenant -c "UPDATE res_users SET login='${user}', password='${DB_PASSWORD}' WHERE login='admin';" > /dev/null 2>&1; then
+        echo "Error: Failed to update credentials"
+        return 1
+    fi
+    echo "✓ Credentials updated"    
     
     echo "✓ All database checks passed successfully!"
     return 0
