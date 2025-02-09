@@ -1,0 +1,69 @@
+[options]
+; This is the password that allows database operations:
+; admin_passwd = admin
+;db_host = db
+;db_name = odoo_db
+;db_port = 5432
+;db_user = odoo_user
+;db_password = odoo
+;dbfilter = .*
+;http_port = 8069
+;addons_path = /mnt/extra-addons
+;init = module_1,module_2
+;update = module_1,module_2
+;upgrade = module_1,module_2
+; db_maxconn = 64
+;limit_time_cpu = 1200
+;limit_time_real = 1800
+;auto_reload = True
+;without_demo = True
+;default_productivity_apps = False
+;list_db = False
+
+; ======================
+; | SMTP Configuration |
+; ======================
+; ------
+; --email-from | specify the SMTP email address for sending email
+; ------
+; email_from = 
+
+; ------
+; --from-filter | specify for which email address the SMTP configuration can be used
+; ------
+; from_filter = False
+
+; ------
+; --smtp | specify the SMTP server for sending email
+; ------
+; smtp_server = localhost
+
+; ------
+; --smtp-port | type = int | specify the SMTP port
+; ------
+; smtp_port = 25
+
+; ------
+; --smtp-ssl | if passed, SMTP connections will be encrypted with SSL (STARTTLS)
+; ------
+; smtp_ssl = 
+
+; ------
+; --smtp-user | specify the SMTP username for sending email
+; ------
+; smtp_user = 
+
+; ------
+; --smtp-password | specify the SMTP password for sending email
+; ------
+; smtp_password = 
+
+; ------
+; --smtp-ssl-certificate-filename | specify the SSL certificate used for authentication
+; ------
+; smtp_ssl_certificate_filename = False
+
+; ------
+; --smtp-ssl-private-key-filename | specify the SSL private key used for authentication
+; ------
+; smtp_ssl_private_key_filename = False
