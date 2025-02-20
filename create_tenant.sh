@@ -574,6 +574,19 @@ sudo chown -R $USER:$USER "${TENANT_DIR}"
 sudo chmod -R 755 "${TENANT_DIR}"
 sudo chmod 644 "${ODOO_CONF}"
 
+
+# Nginx configuration
+log "INFO" "Configuring Nginx for tenant..."
+if [ -f "/usr/local/bin/configure_nginx_tenant.sh" ]; then
+    if sudo /usr/local/bin/configure_nginx_tenant.sh "${TENANT_NAME}" "${TENANT_PORT}"; then
+        log "INFO" "✓ Nginx configured successfully"
+    else
+        log "WARN" "Failed to configure Nginx, but deployment will continue"
+    fi
+else
+    log "WARN" "Nginx configuration script not found at /usr/local/bin/configure_nginx_tenant.sh"
+fi
+
 # Remove port marker
 rm -f "/tmp/odoo_port_$TENANT_PORT"
 
