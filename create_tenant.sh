@@ -6,16 +6,31 @@ export PGPASSWORD=${PGPASSWORD:-postgres}  # Use environment PGPASSWORD or defau
 
 # === Base Directory Configuration ===
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-BASE_DIR="/home/hercules/odoo/odoo_master"  # Set your base directory explicitly
+BASE_DIR="/home/avengers/apps/pythonapps/odoo-17.0/odoo_master"  # Set your base directory explicitly
 TENANTS_DIR="${BASE_DIR}/tenants"
 
 # === Variables ===
-TIMEOUT=${TIMEOUT:-600}  # 10 minutes timeout
+TIMEOUT=${TIMEOUT:-1800}  # 30 minutes timeout
 SECONDS=0
 BASE_PORT=8070
 MAX_PORT=9000
 POSTGRES_VERSION=16
 ODOO_VERSION=17.0
+
+# Function to check and install net-tools on Ubuntu
+check_and_install_net_tools() {
+  if ! command -v netstat &> /dev/null
+  then
+    echo "net-tools not found. Installing net-tools..."
+    sudo apt-get update
+    sudo apt-get install -y net-tools
+  else
+    echo "net-tools is already installed."
+  fi
+}
+
+# Check and install net-tools
+check_and_install_net_tools
 
 # === Color codes for output ===
 RED='\033[0;31m'
@@ -308,7 +323,8 @@ generate_tenant_config() {
     # Create odoo.conf with proper settings
     cat > "${tenant_dir}/odoo.conf" <<EOL
 [options]
-addons_path = /usr/lib/python3/dist-packages/odoo/addons
+;addons_path = /usr/lib/python3/dist-packages/odoo/addons
+addons_path = /mnt/extra-addons
 data_dir = /var/lib/odoo
 admin_passwd = ${db_password}
 db_host = db
@@ -317,6 +333,7 @@ db_user = ${db_user}
 db_password = ${db_password}
 db_name = ${tenant_name}
 dbfilter = ^${tenant_name}$
+without_demo = True
 list_db = False
 workers = 2
 max_cron_threads = 1
@@ -324,6 +341,14 @@ limit_time_cpu = 600
 limit_time_real = 1200
 proxy_mode = True
 db_maxconn = 64
+;email_from =
+;smtp_server = localhost
+;smtp_port = 25
+;smtp_ssl = 
+;smtp_user = 
+;smtp_password = 
+;smtp_ssl_certificate_filename = False
+;smtp_ssl_private_key_filename = False
 EOL
 
     chmod 644 "${tenant_dir}/odoo.conf"
@@ -386,6 +411,8 @@ TENANT_DIR="${TENANTS_DIR}/${TENANT_NAME}"
 ODOO_CONF="${TENANT_DIR}/odoo.conf"
 DOCKER_COMPOSE_FILE="${TENANT_DIR}/docker-compose.yml"
 ENV_FILE="${TENANT_DIR}/.env"
+TENANT_ADDONS_SRC_DIR="${BASE_DIR}/tenant_addons"
+TENANT_ADDONS_DEST_DIR="${TENANT_DIR}/tenant_addons"
 
 # Start deployment
 log "INFO" "Starting tenant deployment at $(date)"
@@ -393,15 +420,24 @@ trap 'cleanup_and_exit 1' ERR
 
 # Create and configure directories
 log "INFO" "Creating directory structure..."
-sudo mkdir -p "${TENANT_DIR}"
-sudo chown -R $USER:$USER "${TENANT_DIR}"
+mkdir -p "${TENANT_DIR}"
+chown -R $USER:$USER "${TENANT_DIR}"
 chmod 755 "${TENANT_DIR}"
+
+log "INFO" "Creating tenant_addons directory ..."
+mkdir -p "$TENANT_DIR/tenant_addons"
+chown -R $USER:$USER "$TENANT_DIR/tenant_addons"
+chmod 755 "$TENANT_DIR/tenant_addons"
 
 # Generate tenant configuration
 generate_tenant_config "${TENANT_DIR}" "${TENANT_NAME}" "${DB_USER}" "${DB_PASSWORD}"
 
 # Find next available port
 TENANT_PORT=$(find_next_port)
+
+echo "Start copying tenant addons from ${TENANT_ADDONS_SOURCE_DIR} to ${TENANT_ADDONS_DEST_DIR} ..."
+cp -a $TENANT_ADDONS_SRC_DIR/* $TENANT_ADDONS_DEST_DIR
+echo "Finished copying tenant addons..."
 
 # Create environment file
 cat > "${ENV_FILE}" <<EOL
@@ -411,17 +447,18 @@ DB_PASSWORD=$DB_PASSWORD
 ODOO_PORT=$TENANT_PORT
 POSTGRES_VERSION=$POSTGRES_VERSION
 ODOO_VERSION=$ODOO_VERSION
+PGPASSWORD=$PGPASSWORD
 EOL
 
 # Create docker-compose file
 cat > "${DOCKER_COMPOSE_FILE}" <<EOL
-version: '3.8'
-
 services:
   db:
     image: postgres:${POSTGRES_VERSION}
     container_name: ${TENANT_NAME}_db
     restart: always
+    env_file:
+      - .env
     environment:
       POSTGRES_PASSWORD: "${PGPASSWORD}"
       POSTGRES_USER: "postgres"
@@ -444,11 +481,14 @@ services:
       - db_data:/var/lib/postgresql/data
 
   odoo:
+    build: .
     image: odoo:${ODOO_VERSION}
     container_name: ${TENANT_NAME}_odoo
     restart: always
     depends_on:
       - db
+    env_file:
+      - .env
     environment:
       - HOST=db
       - USER=${DB_USER}
@@ -475,7 +515,7 @@ services:
     networks:
       - ${TENANT_NAME}_network
     volumes:
-      - ./odoo.conf:/etc/odoo/odoo.conf:ro
+    #   - ./odoo.conf:/etc/odoo/odoo.conf:ro
       - odoo_data:/var/lib/odoo
 
 volumes:
@@ -487,10 +527,49 @@ networks:
     driver: bridge
 EOL
 
+# Create Dockerfile
+cat > "$TENANT_DIR/Dockerfile" <<EOL
+# Use the official Odoo image as a base
+FROM odoo:${ODOO_VERSION}
+
+# Install additional Python packages
+RUN pip3 install africastalking phonenumbers
+
+# Copy custom addons (if any)
+COPY ./tenant_addons /mnt/extra-addons
+
+# Copy the ENV file
+COPY ./.env /
+
+# Copy the odoo.conf file into the container
+# The default location for the odoo.conf file in the Odoo installation is /etc/odoo
+COPY ./odoo.conf /etc/odoo/odoo.conf
+
+# Expose Odoo port
+EXPOSE 8069
+
+# Start Odoo server with parameters to install the custom modules
+# CMD ["odoo", "--load", "base,web,naidash_auth,naidash_courier", "--init", "base,web,naidash_auth,naidash_courier"]
+ENTRYPOINT ["/bin/bash", "-c", "./entrypoint.sh odoo --load base,contacts,naidash_auth,naidash_courier --init base,contacts,naidash_auth,naidash_courier"]
+EOL
+
+# Create Dockerignore
+cat > "$TENANT_DIR/.dockerignore" <<EOL
+.git
+node_modules
+dist
+test
+.vscode
+.github
+.env.dev
+.env.test
+*.txt
+EOL
+
 # Start the services
 cd "${TENANT_DIR}"
 log "INFO" "Starting Docker services..."
-docker-compose -f "${DOCKER_COMPOSE_FILE}" up -d
+docker-compose -f "${DOCKER_COMPOSE_FILE}" up --build -d
 check_timeout
 
 # Wait for PostgreSQL to be ready
@@ -533,19 +612,19 @@ COMMIT;
 EOF
 
 # Initialize Odoo with proper parameters
-docker exec -i ${TENANT_NAME}_odoo odoo --stop-after-init \
-    --database=${TENANT_NAME} \
-    --db_host=db \
-    --db_port=5432 \
-    --db_user=${DB_USER} \
-    --db_password=${DB_PASSWORD} \
-    --without-demo=all \
-    --init=base \
-    --load-language=en_US \
-    --no-http
+# docker exec -i ${TENANT_NAME}_odoo odoo --stop-after-init \
+#     --database=${TENANT_NAME} \
+#     --db_host=db \
+#     --db_port=5432 \
+#     --db_user=${DB_USER} \
+#     --db_password=${DB_PASSWORD} \
+#     --without-demo=all \
+#     --init=base \
+#     --load-language=en_US \
+#     --no-http
 
 # Wait for initialization
-sleep 15
+sleep 60
 
 # Update admin user credentials
 if ! update_admin_user "$TENANT_NAME" "$DB_USER" "$DB_PASSWORD"; then
