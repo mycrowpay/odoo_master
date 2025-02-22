@@ -323,7 +323,6 @@ generate_tenant_config() {
     # Create odoo.conf with proper settings
     cat > "${tenant_dir}/odoo.conf" <<EOL
 [options]
-;addons_path = /usr/lib/python3/dist-packages/odoo/addons
 addons_path = /mnt/extra-addons
 data_dir = /var/lib/odoo
 admin_passwd = ${db_password}
@@ -515,7 +514,6 @@ services:
     networks:
       - ${TENANT_NAME}_network
     volumes:
-    #   - ./odoo.conf:/etc/odoo/odoo.conf:ro
       - odoo_data:/var/lib/odoo
 
 volumes:
@@ -550,7 +548,7 @@ EXPOSE 8069
 
 # Start Odoo server with parameters to install the custom modules
 # CMD ["odoo", "--load", "base,web,naidash_auth,naidash_courier", "--init", "base,web,naidash_auth,naidash_courier"]
-ENTRYPOINT ["/bin/bash", "-c", "./entrypoint.sh odoo --load base,contacts,naidash_auth,naidash_courier --init base,contacts,naidash_auth,naidash_courier"]
+ENTRYPOINT ["/bin/bash", "-c", "./entrypoint.sh odoo --load naidash_auth,naidash_courier --init naidash_auth,naidash_courier"]
 EOL
 
 # Create Dockerignore
@@ -610,18 +608,6 @@ SELECT 'CREATE DATABASE ${TENANT_NAME} WITH TEMPLATE template0'
 WHERE NOT EXISTS (SELECT FROM pg_database WHERE datname = '${TENANT_NAME}');
 COMMIT;
 EOF
-
-# Initialize Odoo with proper parameters
-# docker exec -i ${TENANT_NAME}_odoo odoo --stop-after-init \
-#     --database=${TENANT_NAME} \
-#     --db_host=db \
-#     --db_port=5432 \
-#     --db_user=${DB_USER} \
-#     --db_password=${DB_PASSWORD} \
-#     --without-demo=all \
-#     --init=base \
-#     --load-language=en_US \
-#     --no-http
 
 # Wait for initialization
 sleep 60
