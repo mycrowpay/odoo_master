@@ -105,7 +105,7 @@ EOF
         # Clean up directory
         if [ -d "${TENANT_DIR}" ]; then
             log "INFO" "Removing tenant directory..."
-            sudo rm -rf "${TENANT_DIR}"
+            rm -rf "${TENANT_DIR}"
         fi
     fi
     exit $exit_code
@@ -629,16 +629,6 @@ if ! verify_odoo_service "$TENANT_NAME" "$TENANT_PORT"; then
     log "ERROR" "Odoo service verification failed"
     cleanup_and_exit 1
 fi
-
-# Create initialization marker
-touch "${TENANT_DIR}/.initialized"
-
-# Set final permissions
-log "INFO" "Setting final permissions..."
-sudo chown -R $USER:$USER "${TENANT_DIR}"
-sudo chmod -R 755 "${TENANT_DIR}"
-sudo chmod 644 "${ODOO_CONF}"
-
 
 # Nginx configuration
 log "INFO" "Configuring Nginx for tenant..."
