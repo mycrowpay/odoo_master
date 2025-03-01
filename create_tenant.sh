@@ -334,12 +334,25 @@ db_name = ${tenant_name}
 dbfilter = ^${tenant_name}$
 without_demo = True
 list_db = False
-workers = 2
-max_cron_threads = 1
 limit_time_cpu = 600
 limit_time_real = 1200
 proxy_mode = True
-db_maxconn = 64
+http_interface = 0.0.0.0
+http_port = 8069
+
+# Enhanced CORS settings
+cors = True
+cors_origin = http://localhost:4200
+proxy_set_header = ["Host $host",
+                   "X-Forwarded-For $proxy_add_x_forwarded_for",
+                   "X-Real-IP $remote_addr",
+                   "X-Forwarded-Proto $scheme"]
+
+;Additional security settings
+http_enable = True
+secure_cert_file = False
+secure_key_file = False
+
 ;email_from =
 ;smtp_server = localhost
 ;smtp_port = 25
