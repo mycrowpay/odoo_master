@@ -544,7 +544,8 @@ cat > "$TENANT_DIR/Dockerfile" <<EOL
 FROM odoo:${ODOO_VERSION}
 
 # Install additional Python packages
-RUN pip3 install africastalking phonenumbers
+RUN pip3 install setuptools wheel Wkhtmltopdf africastalking phonenumbers
+
 
 # Copy custom addons (if any)
 COPY ./tenant_addons /mnt/extra-addons
