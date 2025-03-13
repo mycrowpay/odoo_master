@@ -39,6 +39,9 @@ else
     
     echo "Docker has been installed."
 
+    # Create the docker group if it does not exist
+    sudo groupadd docker
+
     # Add the current user to the docker group
     sudo usermod -aG docker $USER
     echo "User $USER has been added to the docker group. Please log out and log back in for the changes to take effect."

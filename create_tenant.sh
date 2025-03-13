@@ -1,6 +1,5 @@
 #!/bin/bash
 
-# === Script Configuration ===
 set -e  # Exit on any error
 
 # Check if .env file exists
@@ -22,11 +21,6 @@ fi
 export PGPASSWORD=${PGPASSWORD:-postgres}  # Use environment PGPASSWORD or default to 'postgres'
 
 # === Base Directory Configuration ===
-# SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
-# BASE_DIR="/home/avengers/apps/pythonapps/odoo-17.0/odoo_master"  # Set your base directory explicitly
-# TENANTS_DIR="${BASE_DIR}/tenants"
-
-# === Base Directory Configuration ===
 SCRIPT_DIR="$( cd "$( dirname "${BASH_SOURCE[0]}" )" && pwd )"
 TENANTS_DIR="$HOME/tenants"
 
@@ -37,21 +31,6 @@ BASE_PORT=8070
 MAX_PORT=9000
 POSTGRES_VERSION=16
 ODOO_VERSION=17.0
-
-# # Function to check and install net-tools on Ubuntu
-# check_and_install_net_tools() {
-#   if ! command -v netstat &> /dev/null
-#   then
-#     echo "net-tools not found. Installing net-tools..."
-#     sudo apt-get update
-#     sudo apt-get install -y net-tools
-#   else
-#     echo "net-tools is already installed."
-#   fi
-# }
-
-# # Check and install net-tools
-# check_and_install_net_tools
 
 # === Install necessary on Host Server ===
 ./scripts/server_setup.sh
@@ -179,8 +158,6 @@ EOF
     return 0
 }
 
-
-
 verify_services() {
     local tenant=$1
     
@@ -299,49 +276,6 @@ EOF
         
         log "WARN" "Attempt $i failed, retrying after 5 seconds..."
         sleep 5
-    done
-
-    log "INFO" "Connecting to $RDS_HOST to create the database user $user..."
-    # Create the Postgres user/role on the Remote Hostimg Site e.g AWS
-    PGPASSWORD=$RDS_PASSWORD psql -h $RDS_HOST -p $RDS_PORT -U $RDS_USER -d postgres <<EOF
-    DO \$\$
-    BEGIN
-        -- Reassign owned objects
-        IF EXISTS (SELECT FROM pg_roles WHERE rolname = '${user}') THEN
-            REASSIGN OWNED BY ${user} TO ${RDS_USER};
-            DROP OWNED BY ${user};            
-        END IF;
-    END \$\$;
-    \q
-EOF
-
-    # Add retry logic
-    for j in {1..3}; do
-        # First drop existing role connections
-        PGPASSWORD=$RDS_PASSWORD psql -h $RDS_HOST -p $RDS_PORT -U $RDS_USER -d postgres <<EOF
-        SELECT pg_terminate_backend(pid) 
-        FROM pg_stat_activity 
-        WHERE usename = '${user}';
-        -- Create the role with proper permissions
-        DO \$\$
-        BEGIN
-            DROP ROLE IF EXISTS ${user};
-            CREATE USER ${user} WITH LOGIN PASSWORD '${password}' CREATEDB CREATEROLE;
-            -- ALTER USER ${user} WITH SUPERUSER;
-            -- GRANT CONNECT ON DATABASE postgres TO ${user};
-            ALTER ROLE ${user} VALID UNTIL 'infinity';
-            ALTER ROLE ${user} SET password_encryption = 'scram-sha-256';            
-        END \$\$;
-        \q                
-EOF
-        
-        if [ $? -eq 0 ]; then
-            log "INFO" "✓ Database user ${user} created successfully"
-            return 0
-        fi
-        
-        log "WARN" "Attempt $j failed, retrying after 5 seconds..."
-        sleep 5
     done    
     
     log "ERROR" "Failed to create database user after 3 attempts"
@@ -379,6 +313,65 @@ EOF
     \q
 EOF
 
+}
+
+create_database_user_on_rds() {
+    local user=$1
+    local password=$2
+
+    log "INFO" "Connecting to $RDS_HOST & creating database user: $user ..."
+    # Create the Postgres user/role on the Remote Hostimg Site e.g AWS
+    PGPASSWORD=$RDS_PASSWORD psql -h $RDS_HOST -p $RDS_PORT -U $RDS_USER -d postgres <<EOF
+    DO \$\$
+    BEGIN
+        -- Reassign owned objects
+        IF EXISTS (SELECT FROM pg_roles WHERE rolname = '${user}') THEN
+            REASSIGN OWNED BY ${user} TO ${RDS_USER};
+            DROP OWNED BY ${user};            
+        END IF;
+    END \$\$;
+    \q
+EOF
+
+    # Add retry logic
+    for j in {1..3}; do
+        # First drop existing role connections
+        PGPASSWORD=$RDS_PASSWORD psql -h $RDS_HOST -p $RDS_PORT -U $RDS_USER -d postgres <<EOF
+        SELECT pg_terminate_backend(pid) 
+        FROM pg_stat_activity 
+        WHERE usename = '${user}';
+        -- Create the role with proper permissions
+        DO \$\$
+        BEGIN
+            DROP ROLE IF EXISTS ${user};
+            CREATE USER ${user} WITH LOGIN PASSWORD '${password}' CREATEDB CREATEROLE;
+            -- ALTER USER ${user} WITH SUPERUSER;
+            -- GRANT CONNECT ON DATABASE postgres TO ${user};
+            ALTER ROLE ${user} VALID UNTIL 'infinity';
+            ALTER ROLE ${user} SET password_encryption = 'scram-sha-256';            
+        END \$\$;
+        \q                
+EOF
+        
+        if [ $? -eq 0 ]; then
+            log "INFO" "✓ Database user ${user} created successfully on AWS"
+            return 0
+        fi
+        
+        log "WARN" "Attempt $j failed, retrying after 5 seconds..."
+        sleep 5
+    done
+    
+    log "ERROR" "Failed to create database user on AWS after 3 attempts"
+    return 1
+}
+
+create_database_on_rds() {
+    local user=$1
+    local dbname=$2
+    
+    log "INFO" "Connecting to $RDS_HOST & creating database: $dbname ..."    
+
    # Create the Postgres database on the Remote Hostimg Site e.g AWS
     PGPASSWORD=$RDS_PASSWORD psql -h $RDS_HOST -p $RDS_PORT -U $RDS_USER -d postgres <<EOF
     DROP DATABASE IF EXISTS ${dbname}; --this won't work since the rds user doesn't own the database
@@ -401,6 +394,7 @@ EOF
     -- ALTER SCHEMA public OWNER TO ${user};
     \q
 EOF
+
 }
 
 generate_tenant_config() {
@@ -506,19 +500,25 @@ function export_and_import_db() {
     echo "Start exporting database $TENANT_NAME ..."
     
     # Connect to the Postgres container and export the database
-    docker exec -t ${TENANT_NAME}_db pg_dump -U postgres -d $TENANT_NAME > /${TENANT_NAME}.sql
+    docker exec -t ${TENANT_NAME}_db pg_dump -U postgres -d $TENANT_NAME > /tmp/${TENANT_NAME}.sql
+    # docker exec -i ${TENANT_NAME}_db /bin/bash -c "pg_dump -U postgres $TENANT_NAME" > /tmp/${TENANT_NAME}.sql
 
     # Copy the exported database file from the tenant container to the host machine
-    docker cp ${TENANT_NAME}_db:/${TENANT_NAME}.sql $TENANT_DIR
+    docker cp ${TENANT_NAME}_db:/tmp/${TENANT_NAME}.sql $TENANT_DIR
 
-    echo "Finished exporting database $TENANT_NAME"
+    # Check if the export was successful
+    if [ -f "$TENANT_DIR/$TENANT_NAME.sql" ]; then
+        echo "Finished exporting database $TENANT_NAME"
 
-    echo "Start uploading database $TENANT_NAME to $RDS_HOST ..."
+        echo "Start uploading database $TENANT_NAME to $RDS_HOST ..."
 
-    # Import the exported database into AWS RDS Postgres
-    PGPASSWORD=$RDS_PASSWORD psql -h $RDS_HOST -p $RDS_PORT -U $RDS_USER -Fc -b -v -d $TENANT_NAME -f $TENANT_DIR
+        # Upload the exported database to AWS RDS
+        PGPASSWORD=$RDS_PASSWORD psql -h $RDS_HOST -p $RDS_PORT -U $RDS_USER -Fc -b -v -d $TENANT_NAME -f $TENANT_DIR/$TENANT_NAME.sql
 
-    echo "Finished uploading database $TENANT_NAME"
+        echo "Finished uploading database $TENANT_NAME"
+    else
+        echo "Failed to export database $TENANT_NAME"
+    fi
 
     # Check if the tenant's sql file exists and delete it
     if [ -f "$TENANT_DIR/$TENANT_NAME.sql" ]; then
@@ -726,17 +726,6 @@ test
 *.txt
 EOL
 
-# # Zip the tenant's configurations
-# if [ -d "$TENANT_DIR" ]; then
-#     cd $TENANTS_DIR
-
-#     echo "Start zipping $TENANT_DIR directory ..."
-#     zip -r "$TENANT_NAME.zip" "$TENANT_NAME"        
-#     echo "Finished zipping $TENANT_DIR directory ..."
-# else
-#     echo "$TENANT_DIR directory does not exist."
-# fi
-
 # Start the services
 cd "${TENANT_DIR}"
 log "INFO" "Starting Docker services..."
@@ -820,10 +809,15 @@ if [ -d "$TENANT_DIR" ]; then
 
     log "INFO" "Stopping Odoo & Postgres containers ..."
     docker compose -f "${DOCKER_COMPOSE_4_ODOO_N_POSTGRES}" down -v
-    sleep 10
+    sleep 15
+
+    create_database_user_on_rds "${DB_USER}" "${DB_PASSWORD}"
+
+    create_database_on_rds "${DB_USER}" "${TENANT_NAME}"
     
     log "INFO" "Starting Odoo container with RDS..."    
-    docker compose -f "${DOCKER_COMPOSE_4_ODOO}" up --build -d
+    # docker compose -f "${DOCKER_COMPOSE_4_ODOO}" up --build -d
+    docker compose -f "${DOCKER_COMPOSE_4_ODOO}" up -d
     check_timeout 
 else
     echo "$TENANT_DIR directory does not exist."
