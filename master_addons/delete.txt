@@ -1,1 +1,0 @@
-Add all the relevant modules into `master_addons` directory
