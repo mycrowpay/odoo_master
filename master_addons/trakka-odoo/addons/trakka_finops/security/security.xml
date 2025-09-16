@@ -1,0 +1,6 @@
+<odoo>
+  <record id="group_finops_user" model="res.groups">
+    <field name="name">FinOps User</field>
+    <field name="implied_ids" eval="[(4, ref('trakka_ops.trakka_group_finance'))]"/>
+  </record>
+</odoo>

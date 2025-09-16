@@ -1,0 +1,63 @@
+<odoo>
+  <!-- Accounts (company-scoped) -->
+  <record id="acc_trk_escrow_liab" model="account.account">
+    <field name="name">Trakka Escrow Liability</field>
+    <field name="code">TRK.ESCROW</field>
+    <field name="account_type">liability_current</field>
+    <field name="company_id" ref="base.main_company"/>
+  </record>
+
+  <record id="acc_trk_wallet_liab" model="account.account">
+    <field name="name">Trakka Seller Wallet (Liability)</field>
+    <field name="code">TRK.WALLET</field>
+    <field name="account_type">liability_current</field>
+    <field name="company_id" ref="base.main_company"/>
+  </record>
+
+  <record id="acc_trk_buyer_payout_liab" model="account.account">
+    <field name="name">Trakka Buyer Payout Liability</field>
+    <field name="code">TRK.PAYOUT</field>
+    <field name="account_type">liability_current</field>
+    <field name="company_id" ref="base.main_company"/>
+  </record>
+
+  <record id="acc_trk_returns_handling_rev" model="account.account">
+    <field name="name">Trakka Returns Handling Revenue</field>
+    <field name="code">TRK.RETREV</field>
+    <field name="account_type">income</field>
+    <field name="company_id" ref="base.main_company"/>
+  </record>
+
+  <!-- Journals with default accounts (unchanged) -->
+  <record id="journal_escrow_liability" model="account.journal">
+    <field name="name">Escrow Liability</field>
+    <field name="type">general</field>
+    <field name="code">ESC</field>
+    <field name="company_id" ref="base.main_company"/>
+    <field name="default_account_id" ref="acc_trk_escrow_liab"/>
+  </record>
+
+  <record id="journal_wallet_liability" model="account.journal">
+    <field name="name">Seller Wallet</field>
+    <field name="type">general</field>
+    <field name="code">WLT</field>
+    <field name="company_id" ref="base.main_company"/>
+    <field name="default_account_id" ref="acc_trk_wallet_liab"/>
+  </record>
+
+  <record id="journal_buyer_payout_liability" model="account.journal">
+    <field name="name">Buyer Payout Liability</field>
+    <field name="type">general</field>
+    <field name="code">BPL</field>
+    <field name="company_id" ref="base.main_company"/>
+    <field name="default_account_id" ref="acc_trk_buyer_payout_liab"/>
+  </record>
+
+  <record id="journal_returns_revenue" model="account.journal">
+    <field name="name">Returns Handling Revenue</field>
+    <field name="type">general</field>
+    <field name="code">RTR</field>
+    <field name="company_id" ref="base.main_company"/>
+    <field name="default_account_id" ref="acc_trk_returns_handling_rev"/>
+  </record>
+</odoo>

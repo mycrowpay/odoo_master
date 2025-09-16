@@ -1,0 +1,41 @@
+<odoo>
+  <record id="view_rider_tree" model="ir.ui.view">
+    <field name="name">trakka.pulse.rider.tree</field>
+    <field name="model">trakka.pulse.rider</field>
+    <field name="arch" type="xml">
+      <tree>
+        <field name="name"/>
+        <field name="phone"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="action_riders" model="ir.actions.act_window">
+    <field name="name">Riders</field>
+    <field name="res_model">trakka.pulse.rider</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+  <menuitem id="menu_pulse_riders_action" parent="menu_pulse_riders" action="action_riders"/>
+
+  <record id="view_event_tree" model="ir.ui.view">
+    <field name="name">trakka.pulse.event.tree</field>
+    <field name="model">trakka.pulse.event</field>
+    <field name="arch" type="xml">
+      <tree>
+        <field name="event_ts"/>
+        <field name="event_type"/>
+        <field name="rider_id"/>
+        <field name="picking_id"/>
+        <field name="sale_order_id"/>
+        <field name="event_ref"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="action_events" model="ir.actions.act_window">
+    <field name="name">Events</field>
+    <field name="res_model">trakka.pulse.event</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+  <menuitem id="menu_pulse_events_action" parent="menu_pulse_events" action="action_events"/>
+</odoo>

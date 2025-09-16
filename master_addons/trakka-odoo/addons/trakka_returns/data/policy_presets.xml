@@ -1,0 +1,20 @@
+<odoo>
+  <record id="policy_standard" model="trakka.policy">
+    <field name="name">Standard</field>
+    <field name="code">standard</field>
+    <field name="handling_fee_min">80</field>
+    <field name="handling_fee_max">120</field>
+  </record>
+  <record id="policy_friendly" model="trakka.policy">
+    <field name="name">Friendly</field>
+    <field name="code">friendly</field>
+    <field name="handling_fee_min">0</field>
+    <field name="handling_fee_max">80</field>
+  </record>
+  <record id="policy_strict" model="trakka.policy">
+    <field name="name">Strict</field>
+    <field name="code">strict</field>
+    <field name="handling_fee_min">120</field>
+    <field name="handling_fee_max">150</field>
+  </record>
+</odoo>

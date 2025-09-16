@@ -1,0 +1,22 @@
+<odoo>
+  <record id="view_return_case_tree" model="ir.ui.view">
+    <field name="name">trakka.return.case.tree</field>
+    <field name="model">trakka.return.case</field>
+    <field name="arch" type="xml">
+      <tree>
+        <field name="name"/>
+        <field name="sale_order_id"/>
+        <field name="policy_id"/>
+        <field name="reason"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="action_return_cases" model="ir.actions.act_window">
+    <field name="name">Return Cases</field>
+    <field name="res_model">trakka.return.case</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+
+  <menuitem id="menu_returns_cases_action" parent="menu_returns_cases" action="action_return_cases"/>
+</odoo>

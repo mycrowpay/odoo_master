@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+pulse_rider_access,pulse_rider_access,model_trakka_pulse_rider,trakka_ops.trakka_group_ops,1,1,1,0
+pulse_event_access,pulse_event_access,model_trakka_pulse_event,trakka_ops.trakka_group_ops,1,1,1,0

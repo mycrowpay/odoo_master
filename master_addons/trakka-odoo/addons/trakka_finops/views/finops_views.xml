@@ -1,0 +1,147 @@
+<odoo>
+  <!-- Escrow -->
+  <record id="view_escrow_tree" model="ir.ui.view">
+    <field name="name">trakka.payguard.escrow.tree</field>
+    <field name="model">trakka.payguard.escrow</field>
+    <field name="arch" type="xml">
+      <tree>
+        <field name="name"/>
+        <field name="sale_order_id"/>
+        <field name="partner_id"/>
+        <field name="amount"/>
+        <field name="state"/>
+        <field name="mpesa_ref"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="view_escrow_form" model="ir.ui.view">
+    <field name="name">trakka.payguard.escrow.form</field>
+    <field name="model">trakka.payguard.escrow</field>
+    <field name="arch" type="xml">
+      <form string="Escrow">
+        <!-- Expose flag/field so header modifiers evaluate deterministically -->
+        <field name="can_mark_released_ready" invisible="1"/>
+
+        <header>
+          <button name="action_mark_released_ready"
+                  type="object"
+                  string="Mark Release Ready"
+                  class="oe_highlight"
+                  invisible="[('can_mark_released_ready','=',False)]"
+                  groups="trakka_ops.trakka_group_finance,trakka_ops.trakka_group_admin"/>
+        </header>
+
+        <sheet>
+          <group>
+            <field name="name"/>
+            <field name="sale_order_id"/>
+            <field name="partner_id" readonly="1"/>
+            <field name="amount"/>
+            <field name="currency_id"/>
+            <field name="mpesa_ref"/>
+            <field name="state" readonly="1"/>
+          </group>
+
+          <group string="Accounting">
+            <field name="settlement_move_id" readonly="1"/>
+            <field name="wallet_move_id" readonly="1"/>
+            <field name="settlement_batch_id" readonly="1"/>
+          </group>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="action_escrows" model="ir.actions.act_window">
+    <field name="name">Escrows</field>
+    <field name="res_model">trakka.payguard.escrow</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+
+  <!-- Wallet -->
+  <record id="view_wallet_tree" model="ir.ui.view">
+    <field name="name">trakka.wallet.tree</field>
+    <field name="model">trakka.wallet</field>
+    <field name="arch" type="xml">
+      <tree>
+        <field name="name"/>
+        <field name="partner_id"/>
+        <field name="balance"/>
+        <field name="currency_id"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="view_wallet_form" model="ir.ui.view">
+    <field name="name">trakka.wallet.form</field>
+    <field name="model">trakka.wallet</field>
+    <field name="arch" type="xml">
+      <form string="Wallet">
+        <sheet>
+          <group>
+            <field name="name"/>
+            <field name="partner_id"/>
+            <field name="currency_id"/>
+            <field name="balance" readonly="1"/>
+          </group>
+          <notebook>
+            <page string="Moves">
+              <field name="move_ids" context="{'default_wallet_id': active_id}" readonly="1"/>
+            </page>
+          </notebook>
+        </sheet>
+      </form>
+    </field>
+  </record>
+
+  <record id="view_wallet_move_tree" model="ir.ui.view">
+    <field name="name">trakka.wallet.move.tree</field>
+    <field name="model">trakka.wallet.move</field>
+    <field name="arch" type="xml">
+      <tree>
+        <field name="wallet_id"/>
+        <field name="direction"/>
+        <field name="amount"/>
+        <field name="ref"/>
+        <field name="idempotency_key"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="action_wallets" model="ir.actions.act_window">
+    <field name="name">Wallets</field>
+    <field name="res_model">trakka.wallet</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+
+  <record id="action_wallet_moves" model="ir.actions.act_window">
+    <field name="name">Wallet Moves</field>
+    <field name="res_model">trakka.wallet.move</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+
+  <!-- Settlement Batch -->
+  <record id="view_settlement_batch_tree" model="ir.ui.view">
+    <field name="name">trakka.settlement.batch.tree</field>
+    <field name="model">trakka.settlement.batch</field>
+    <field name="arch" type="xml">
+      <tree>
+        <field name="name"/>
+        <field name="line_count"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="action_settlements" model="ir.actions.act_window">
+    <field name="name">Settlement Batches</field>
+    <field name="res_model">trakka.settlement.batch</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+
+  <!-- Hook into menus -->
+  <menuitem id="menu_finops_escrows_action" parent="menu_finops_escrows" action="action_escrows" sequence="1"/>
+  <menuitem id="menu_finops_wallets_action" parent="menu_finops_wallets" action="action_wallets" sequence="1"/>
+  <menuitem id="menu_finops_wallet_moves_action" parent="menu_finops_wallets" action="action_wallet_moves" sequence="2"/>
+  <menuitem id="menu_finops_settlements_action" parent="menu_finops_settlements" action="action_settlements" sequence="1"/>
+</odoo>

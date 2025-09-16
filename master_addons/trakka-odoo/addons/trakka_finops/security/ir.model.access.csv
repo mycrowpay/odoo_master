@@ -1,0 +1,5 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+finops_access_escrow,finops_access_escrow,model_trakka_payguard_escrow,trakka_ops.trakka_group_finance,1,1,1,0
+finops_access_wallet,finops_access_wallet,model_trakka_wallet,trakka_ops.trakka_group_finance,1,1,1,0
+finops_access_wallet_move,finops_access_wallet_move,model_trakka_wallet_move,trakka_ops.trakka_group_finance,1,1,1,0
+finops_access_settlement,finops_access_settlement,model_trakka_settlement_batch,trakka_ops.trakka_group_finance,1,1,1,0

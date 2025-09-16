@@ -1,0 +1,3 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+returns_policy_access,returns_policy_access,model_trakka_policy,trakka_ops.trakka_group_support,1,1,1,0
+returns_case_access,returns_case_access,model_trakka_return_case,trakka_ops.trakka_group_support,1,1,1,0

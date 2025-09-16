@@ -1,0 +1,13 @@
+<odoo>
+  <!-- Root Trakka app -->
+  <menuitem id="menu_trakka_root"
+            name="Trakka"
+            sequence="10"
+            groups="trakka_ops.trakka_group_ops,trakka_ops.trakka_group_finance,trakka_ops.trakka_group_admin,trakka_ops.trakka_group_support,trakka_ops.trakka_group_readonly"/>
+
+  <!-- Section menus (placeholders for other modules to extend) -->
+  <menuitem id="menu_trakka_finops_root" name="FinOps" parent="menu_trakka_root" sequence="20"/>
+  <menuitem id="menu_trakka_returns_root" name="Returns" parent="menu_trakka_root" sequence="30"/>
+  <menuitem id="menu_trakka_pulse_root" name="Pulse" parent="menu_trakka_root" sequence="40"/>
+  <menuitem id="menu_trakka_ops_dash_root" name="Dashboards" parent="menu_trakka_root" sequence="50"/>
+</odoo>

@@ -1,0 +1,5 @@
+<odoo>
+  <!-- Hidden/technical menu (kept minimal; API is headless) -->
+  <menuitem id="menu_api_root" name="API (Private)" parent="trakka_ops.menu_trakka_root"
+            sequence="90" groups="trakka_ops.trakka_group_admin"/>
+</odoo>

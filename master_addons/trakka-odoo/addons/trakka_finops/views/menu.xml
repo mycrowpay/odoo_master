@@ -1,0 +1,6 @@
+<odoo>
+  <menuitem id="menu_finops_root" name="FinOps" parent="trakka_ops.menu_trakka_finops_root" sequence="1"/>
+  <menuitem id="menu_finops_escrows" name="Escrows" parent="menu_finops_root" sequence="10"/>
+  <menuitem id="menu_finops_wallets" name="Wallets" parent="menu_finops_root" sequence="20"/>
+  <menuitem id="menu_finops_settlements" name="Settlements" parent="menu_finops_root" sequence="30"/>
+</odoo>

@@ -1,0 +1,19 @@
+# Python
+__pycache__/
+*.pyc
+
+# Odoo
+.odoo*
+*.log
+*.sqlite
+
+# VSCode/IDE
+.vscode/
+.idea/
+
+# Env
+.env
+
+# Docker artifacts
+docker/data/
+docker/filestore/
