@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+  <data noupdate="1">
+    <record id="seq_trakka_return_case" model="ir.sequence">
+      <field name="name">Trakka Return Case</field>
+      <field name="code">trakka.return.case</field>
+      <field name="prefix">RC/%(year)s/</field>
+      <field name="padding">4</field>
+      <field name="company_id" ref="base.main_company"/>
+    </record>
+  </data>
+</odoo>

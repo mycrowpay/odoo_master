@@ -6,11 +6,12 @@
     "category": "Accounting",
     "author": "Trakka",
     "license": "LGPL-3",
-    "depends": ["trakka_ops", "account", "sale_management", "stock"],
+    "depends": ["trakka_ops", "account", "sale_management","sales_team", "stock"],
     "data": [
         "security/security.xml",
         "security/ir.model.access.csv",
         "data/accounts_journals.xml",
+        "data/sequences.xml",
         "data/cron.xml",                 
         "views/menu.xml",
         "views/finops_views.xml",

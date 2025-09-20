@@ -1,20 +1,30 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <odoo>
-  <record id="policy_standard" model="trakka.policy">
-    <field name="name">Standard</field>
-    <field name="code">standard</field>
-    <field name="handling_fee_min">80</field>
-    <field name="handling_fee_max">120</field>
-  </record>
-  <record id="policy_friendly" model="trakka.policy">
-    <field name="name">Friendly</field>
-    <field name="code">friendly</field>
-    <field name="handling_fee_min">0</field>
-    <field name="handling_fee_max">80</field>
-  </record>
-  <record id="policy_strict" model="trakka.policy">
-    <field name="name">Strict</field>
-    <field name="code">strict</field>
-    <field name="handling_fee_min">120</field>
-    <field name="handling_fee_max">150</field>
-  </record>
+  <data noupdate="1">
+    <record id="trakka_policy_defect" model="trakka.policy">
+      <field name="name">Defect</field>
+      <field name="fee_type">fixed</field>
+      <field name="fee_value">0.0</field>
+      <field name="allow_overrides">False</field>
+      <field name="company_id" ref="base.main_company"/>
+    </record>
+
+    <record id="trakka_policy_remorse" model="trakka.policy">
+      <field name="name">Remorse</field>
+      <field name="fee_type">percent</field>
+      <field name="fee_value">10.0</field>
+      <field name="allow_overrides">True</field>
+      <field name="company_id" ref="base.main_company"/>
+    </record>
+
+    <!-- Example override bound to the root product category -->
+    <record id="trakka_policy_override_root" model="trakka.policy.override">
+      <field name="policy_id" ref="trakka_policy_remorse"/>
+      <field name="category_id" ref="product.product_category_all"/>
+      <field name="fee_type">percent</field>
+      <field name="fee_value">15.0</field>
+      <field name="apply_allow_overrides">True</field>
+      <field name="allow_overrides">True</field>
+    </record>
+  </data>
 </odoo>

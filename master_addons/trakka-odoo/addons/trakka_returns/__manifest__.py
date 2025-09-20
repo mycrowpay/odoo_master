@@ -1,18 +1,21 @@
 {
     "name": "Trakka Returns OS",
-    "summary": "Returns policies and orchestration",
     "version": "17.0.1.0.0",
-    "category": "Inventory/Returns",
-    "author": "Trakka",
-    "license": "LGPL-3",
-    "depends": ["trakka_ops", "stock", "account", "sale_management"],
+    "depends": [
+        "sale",
+        "stock",
+        "account",
+        "mail",
+        "trakka_finops",  # ✅ dependency, not a data file
+    ],
     "data": [
         "security/security.xml",
         "security/ir.model.access.csv",
+        "data/sequence.xml",
         "data/policy_presets.xml",
-        "views/menu.xml",
         "views/returns_views.xml",
+        "views/menu.xml",
     ],
     "installable": True,
-    "application": False,
+    "application": True,
 }
