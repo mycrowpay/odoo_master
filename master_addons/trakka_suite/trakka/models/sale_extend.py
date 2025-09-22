@@ -205,35 +205,43 @@ class SaleOrder(models.Model):
 
         return action
 
+    # ---------- Invoicing for delivered qty ----------
+    def _trakka_invoice_delivered_qty(self, dispatch=None, post=True):
+        """
+        Create invoice(s) for delivered quantities only.
 
-     # ---------- Invoicing for delivered qty ----------
-    def _trakka_invoice_delivered_qty(self, dispatch):
-       """
-       Create & post customer invoice(s) for delivered quantities.
-       - Expects the linked picking to be 'done' so delivered qty is accurate.
-       - Uses standard sale._create_invoices() which respects invoice policy 'delivery'.
-       Returns the posted invoice recordset (can be empty if nothing invoiceable).
-       """
-       self.ensure_one()
-       if not dispatch or not dispatch.picking_id:
-           raise ValidationError(_("No delivery picking linked to this dispatch."))
-       if dispatch.picking_id.state != "done":
-           raise ValidationError(_("Picking must be 'Done' before invoicing delivered quantities."))
+        Safe to call multiple times:
+          - If already fully invoiced or nothing is invoiceable -> returns empty recordset.
+          - Otherwise creates draft invoice(s) and posts them if post=True.
 
-       # Quick sanity: anything to invoice?
-       has_delivered = any(l.qty_delivered > 0 for l in self.order_line)
-       if not has_delivered:
-           # Nothing delivered (should not happen if picking is done, but safe guard)
-           return self.env["account.move"]
+        :param dispatch: optional trakka.dispatch.order (for logging)
+        :param post: bool, post created invoices when True
+        :return: account.move recordset (possibly empty)
+        """
+        self.ensure_one()
 
-       # Create draft invoices from SO (delivery-based policy will pick delivered qty)
-       invoices = self._create_invoices(final=True)
-       if not invoices:
-           return invoices
+        # Fast exit if SO already fully invoiced
+        if self.invoice_status == "invoiced":
+            return self.env["account.move"]
 
-       # Post them
-       invoices.action_post()
-       return invoices
+        # Only real lines (no sections/notes) that still have something to invoice
+        invoiceable_lines = self.order_line.filtered(
+            lambda l: not l.display_type and l.qty_to_invoice > 0
+        )
+        if not invoiceable_lines:
+            # Nothing to invoice -> quiet no-op
+            return self.env["account.move"]
 
-    # IMPORTANT: do NOT auto-create dispatches on confirm here.
-    # Inventory creates stock.pickings; dispatches are keyed off each outgoing picking.
+        # Create invoices for delivered quantities
+        moves = self.with_context(move_type="out_invoice")._create_invoices(final=True)
+
+        if post:
+            for mv in moves:
+                if mv.state == "draft":
+                    mv.action_post()
+
+        self.message_post(
+            body=_("Auto-invoiced delivered quantities%s.")
+                 % (f" (dispatch: {dispatch.name})" if dispatch else "")
+        )
+        return moves
