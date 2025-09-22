@@ -35,6 +35,14 @@ class TrakkaDispatchOrder(models.Model):
         tracking=True,
     )
 
+    # Computed helper to surface the escrow linked to the SO (not stored)
+    escrow_id = fields.Many2one(
+        "trakka.payguard.escrow",
+        compute="_compute_escrow_id",
+        string="Escrow",
+        readonly=True,
+    )
+
     # Optional seller (merchant) side — keep label distinct from 'Company'
     seller_id = fields.Many2one(
         "res.partner",
@@ -136,6 +144,34 @@ class TrakkaDispatchOrder(models.Model):
     ]
 
     # ----------------------------
+    # Computes
+    # ----------------------------
+    @api.depends("sale_order_id")
+    def _compute_escrow_id(self):
+        Escrow = self.env["trakka.payguard.escrow"].sudo()
+        for rec in self:
+            rec.escrow_id = False
+            if rec.sale_order_id:
+                esc = Escrow.search([("sale_order_id", "=", rec.sale_order_id.id)], limit=1)
+                rec.escrow_id = esc.id if esc else False
+
+    # ----------------------------
+    # Server-side guard: require escrow in 'held' to create
+    # ----------------------------
+    @api.model
+    def create(self, vals):
+        so_id = vals.get("sale_order_id")
+        if not so_id:
+            raise ValidationError(_("Dispatch must be linked to a Sales Order."))
+        Escrow = self.env["trakka.payguard.escrow"].sudo()
+        escrow = Escrow.search([("sale_order_id", "=", so_id)], limit=1)
+        if not escrow:
+            raise ValidationError(_("You must create an Escrow for this Sales Order before creating a Dispatch."))
+        if escrow.state != "held":
+            raise ValidationError(_("Dispatch can be created only when the Escrow is in 'Held' state."))
+        return super().create(vals)
+
+    # ----------------------------
     # Onchanges / Defaults
     # ----------------------------
     @api.onchange("sale_order_id")
@@ -145,26 +181,24 @@ class TrakkaDispatchOrder(models.Model):
             if not so:
                 continue
 
-            # Keep company aligned with the SO (and respect check_company)
             if so.company_id and rec.company_id != so.company_id:
                 rec.company_id = so.company_id
 
-            # Prefill consignee info from SO partner
             partner = so.partner_id
             if partner:
                 rec.buyer_contact_name = rec.buyer_contact_name or partner.display_name
-                # prefer mobile over phone
                 phone = partner.mobile or partner.phone or ""
                 rec.buyer_contact_phone = rec.buyer_contact_phone or phone
 
-            # Prefill addresses — customize to your data model as needed
-            # If you have stock.picking addresses, map accordingly; here we fall back to partner addresses.
             if not rec.pickup_address:
-                rec.pickup_address = (so.warehouse_id and so.warehouse_id.partner_id and so.warehouse_id.partner_id.contact_address) or ""
+                rec.pickup_address = (
+                    so.warehouse_id
+                    and so.warehouse_id.partner_id
+                    and so.warehouse_id.partner_id.contact_address
+                ) or ""
             if not rec.dropoff_address:
                 rec.dropoff_address = partner and partner.contact_address or ""
 
-            # Quick & safe quote recompute
             rec._compute_quoted_fee()
 
     @api.onchange("distance_km", "weight_kg", "provider_type")
@@ -173,11 +207,9 @@ class TrakkaDispatchOrder(models.Model):
             rec._compute_quoted_fee()
 
     def _compute_quoted_fee(self):
-        """Very simple quoting. If a pricing model exists (trakka.pricing.rule),
-        try to use it; otherwise fallback to a basic formula."""
+        """Very simple quoting. If pricing model exists (trakka.pricing.rule) use it; else basic formula."""
         for rec in self:
             amount = 0.0
-            # Try optional pricing engine if your module implements it
             if "trakka.pricing.rule" in self.env:
                 rules = self.env["trakka.pricing.rule"].sudo().search(
                     [("company_id", "in", [False, rec.company_id.id])], limit=1
@@ -190,7 +222,6 @@ class TrakkaDispatchOrder(models.Model):
                         sale_order=rec.sale_order_id,
                     )
             if not amount:
-                # Fallback: simple linear quote
                 amount = (rec.distance_km or 0.0) * 50.0 + (rec.weight_kg or 0.0) * 10.0
             rec.quoted_fee = amount
 
@@ -201,7 +232,8 @@ class TrakkaDispatchOrder(models.Model):
         for rec in self:
             if rec.state not in allowed:
                 raise UserError(
-                    _("Operation not allowed from state: %s") % dict(self._fields["state"].selection).get(rec.state, rec.state)
+                    _("Operation not allowed from state: %s")
+                    % dict(self._fields["state"].selection).get(rec.state, rec.state)
                 )
 
     def action_assign(self):
@@ -233,15 +265,22 @@ class TrakkaDispatchOrder(models.Model):
     def action_deliver(self):
         self._ensure_states({"on_route"})
         for rec in self:
-            # Proof checks
             if rec.proof_type == "otp" and not rec.proof_value:
                 raise ValidationError(_("Enter the OTP in 'Proof Value' before delivering."))
             rec.state = "delivered"
             rec.delivered_at = fields.Datetime.now()
             rec.message_post(body=_("Delivered successfully."))
 
+            # Nudge escrow -> released_ready if policy allows
+            Escrow = self.env["trakka.payguard.escrow"].sudo()
+            escrow = Escrow.search([("sale_order_id", "=", rec.sale_order_id.id)], limit=1)
+            if escrow and escrow.state == "held" and escrow.release_policy in ("auto_on_delivery", "auto_after_cooldown"):
+                try:
+                    escrow.action_set_release_ready()
+                except Exception as e:
+                    escrow.message_post(body=_("Auto move to Release Ready failed on delivery: %s") % e)
+
     def action_fail(self):
-        # Allow failing from any non-terminal state except delivered/failed
         self._ensure_states({"new", "assigned", "accepted", "picked", "on_route"})
         for rec in self:
             if not rec.fail_reason:

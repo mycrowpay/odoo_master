@@ -18,11 +18,14 @@
         <field name="partner_id"/>
         <field name="amount"/>
         <field name="state"/>
+        <field name="release_policy"/>
+        <field name="release_ready_at"/>
+        <field name="released_at"/>
       </tree>
     </field>
   </record>
 
-  <!-- Form (includes smart buttons) -->
+  <!-- Form (includes smart buttons + policy/override) -->
   <record id="view_trakka_escrow_form" model="ir.ui.view">
     <field name="name">trakka.payguard.escrow.form</field>
     <field name="model">trakka.payguard.escrow</field>
@@ -39,6 +42,14 @@
                   string="Post Settlement"
                   class="oe_highlight"
                   modifiers="{'invisible': [('state','!=','released_ready')]}"/>
+
+          <!-- FinOps override: allow managers to force Release Ready with a reason -->
+          <button name="action_override_mark_release_ready"
+                  type="object"
+                  string="Override → Release Ready"
+                  class="btn-secondary"
+                  groups="trakka.group_finops_manager,account.group_account_manager"
+                  modifiers="{'invisible': [('state','!=','held')]}"/>
 
           <field name="state" widget="statusbar" statusbar_visible="held,released_ready,released"/>
         </header>
@@ -81,15 +92,28 @@
               <field name="currency_id" readonly="1"/>
               <field name="amount"/>
             </group>
-            <group string="Accounting / Wallet">
-              <field name="account_move_id" readonly="1"/>
-              <field name="wallet_move_id" readonly="1"/>
+
+            <group string="Release Policy">
+              <field name="release_policy"/>
+              <field name="release_cooldown_days"/>
+              <field name="release_ready_at" readonly="1"/>
+              <field name="released_at" readonly="1"/>
+              <field name="allow_manual_override" groups="trakka.group_finops_manager,account.group_account_manager"/>
+              <field name="override_reason"
+                     placeholder="Reason for override…"
+                     groups="trakka.group_finops_manager,account.group_account_manager"
+                     modifiers="{'readonly': [('allow_manual_override', '=', False)]}"/>
             </group>
           </group>
 
           <group string="Dispatch (latest)">
             <field name="latest_dispatch_id" readonly="1" options="{'no_create': True}"/>
             <field name="latest_dispatch_state" readonly="1"/>
+          </group>
+
+          <group string="Accounting / Wallet">
+            <field name="account_move_id" readonly="1"/>
+            <field name="wallet_move_id" readonly="1"/>
           </group>
 
           <chatter/>

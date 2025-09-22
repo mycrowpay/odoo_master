@@ -1,20 +1,33 @@
 <odoo>
-  <!-- Extend SO form: add "Create Escrow" + smart buttons -->
+  <!-- Extend SO form: add "Create Escrow" + "Create Dispatch" + smart buttons -->
   <record id="view_order_form_trakka_extend" model="ir.ui.view">
     <field name="name">sale.order.trakka.extend.form</field>
     <field name="model">sale.order</field>
     <field name="inherit_id" ref="sale.view_order_form"/>
     <field name="arch" type="xml">
-      <!-- Header button -->
+
+      <!-- ===== Header buttons ===== -->
       <xpath expr="//header" position="inside">
+        <!-- Create Escrow -->
         <button name="action_trakka_create_escrow"
                 type="object"
                 string="Create Escrow"
                 class="btn-primary"
                 modifiers="{'invisible': ['|', ('state','not in',['sale','done']), ('trakka_escrow_count','>',0)]}"/>
+
+        <!-- Create Dispatch (visible only if escrow exists and is HELD) -->
+        <button name="action_trakka_create_dispatch"
+                type="object"
+                string="Create Dispatch"
+                class="oe_highlight"
+                modifiers="{'invisible': ['|', ('trakka_has_escrow','=',False), ('trakka_escrow_state','!=','held')]}"/>
+
+        <!-- Make the modifier fields available to the view -->
+        <field name="trakka_has_escrow" invisible="1"/>
+        <field name="trakka_escrow_state" invisible="1"/>
       </xpath>
 
-      <!-- Smart buttons -->
+      <!-- ===== Smart buttons (button_box) ===== -->
       <xpath expr="//sheet/div[@name='button_box']" position="inside">
         <button name="action_trakka_view_escrows"
                 type="object"
@@ -30,6 +43,7 @@
           <field name="trakka_dispatch_count" widget="statinfo" string="Dispatches"/>
         </button>
       </xpath>
+
     </field>
   </record>
 </odoo>

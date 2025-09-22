@@ -1,6 +1,7 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
 from odoo.tools.safe_eval import safe_eval
+from odoo.exceptions import ValidationError, UserError
 
 
 class SaleOrder(models.Model):
@@ -8,6 +9,14 @@ class SaleOrder(models.Model):
 
     trakka_escrow_count = fields.Integer(compute="_compute_trakka_counts", store=False)
     trakka_dispatch_count = fields.Integer(compute="_compute_trakka_counts", store=False)
+
+    # Flags for UI visibility/guards
+    trakka_has_escrow = fields.Boolean(compute="_compute_trakka_escrow_flags", store=False)
+    trakka_escrow_state = fields.Selection(
+        [("held", "Held"), ("released_ready", "Release Ready"), ("released", "Released")],
+        compute="_compute_trakka_escrow_flags",
+        store=False,
+    )
 
     def _compute_trakka_counts(self):
         escrow_rg = self.env["trakka.payguard.escrow"].read_group(
@@ -24,7 +33,17 @@ class SaleOrder(models.Model):
             so.trakka_escrow_count = esc_map.get(so.id, 0)
             so.trakka_dispatch_count = dsp_map.get(so.id, 0)
 
-    # Header button: create or open escrow (enforced 1-per-SO by SQL constraint)
+    def _compute_trakka_escrow_flags(self):
+        Escrow = self.env["trakka.payguard.escrow"].sudo()
+        for so in self:
+            so.trakka_has_escrow = False
+            so.trakka_escrow_state = False
+            esc = Escrow.search([("sale_order_id", "=", so.id)], limit=1)
+            if esc:
+                so.trakka_has_escrow = True
+                so.trakka_escrow_state = esc.state
+
+    # -------- Escrow --------
     def action_trakka_create_escrow(self):
         self.ensure_one()
         Escrow = self.env["trakka.payguard.escrow"].with_company(self.company_id)
@@ -40,16 +59,14 @@ class SaleOrder(models.Model):
         })
         return esc.get_formview_action()
 
-    # Smart buttons
     def action_trakka_view_escrows(self):
         self.ensure_one()
 
-        # Try a few likely XMLIDs; fall back to a generic action if none found
         action = None
         for xmlid in (
+            "trakka.action_trakka_escrow",
             "trakka.action_trakka_escrows",
             "trakka.action_payguard_escrows",
-            "trakka.action_trakka_payguard_escrows",
         ):
             try:
                 action = self.env["ir.actions.act_window"]._for_xml_id(xmlid)
@@ -58,7 +75,6 @@ class SaleOrder(models.Model):
                 action = None
 
         if not action:
-            # Build a vanilla action if the xmlid can't be resolved
             action = {
                 "type": "ir.actions.act_window",
                 "name": _("Escrows"),
@@ -67,32 +83,50 @@ class SaleOrder(models.Model):
                 "target": "current",
             }
 
-        # Normalize & merge context (may be a string)
         base_ctx = action.get("context") or {}
         if isinstance(base_ctx, str):
             base_ctx = safe_eval(base_ctx) or {}
-        ctx = dict(self.env.context)
-        ctx.update(base_ctx)
-        ctx.update({"default_sale_order_id": self.id})
-        action["context"] = ctx
+        base_ctx.update({"default_sale_order_id": self.id})
+        action["context"] = base_ctx
 
-        # Normalize & extend domain (may be a string)
         dom = action.get("domain") or []
         if isinstance(dom, str):
             dom = safe_eval(dom) or []
-        dom = dom + [("sale_order_id", "=", self.id)]
+        dom += [("sale_order_id", "=", self.id)]
         action["domain"] = dom
-
         return action
+
+    # -------- Dispatch (manual, gated by escrow) --------
+    def action_trakka_create_dispatch(self):
+        """Create a dispatch only if an escrow exists and is 'held'."""
+        self.ensure_one()
+        Escrow = self.env["trakka.payguard.escrow"].sudo()
+        Dispatch = self.env["trakka.dispatch.order"].with_company(self.company_id).sudo()
+
+        esc = Escrow.search([("sale_order_id", "=", self.id)], limit=1)
+        if not esc:
+            raise ValidationError(_("Create an Escrow before creating a Dispatch for this Sales Order."))
+        if esc.state != "held":
+            raise ValidationError(_("Dispatch can be created only when the Escrow is in 'Held' state."))
+
+        # Respect the unique constraint: one dispatch per SO
+        existing = Dispatch.search([("sale_order_id", "=", self.id)], limit=1)
+        if existing:
+            return existing.get_formview_action()
+
+        dsp = Dispatch.create({
+            "sale_order_id": self.id,
+            "company_id": self.company_id.id,
+        })
+        return dsp.get_formview_action()
 
     def action_trakka_view_dispatch(self):
         self.ensure_one()
 
-        # Try our dispatch action XMLID; fall back to a plain action
         action = None
         for xmlid in (
-            "trakka.action_trakka_dispatch_orders",     # <- matches your dispatch_views.xml
-            "trakka.action_dispatch_orders",            # optional fallback guesses
+            "trakka.action_trakka_dispatch_orders",
+            "trakka.action_dispatch_orders",
         ):
             try:
                 action = self.env["ir.actions.act_window"]._for_xml_id(xmlid)
@@ -109,19 +143,15 @@ class SaleOrder(models.Model):
                 "target": "current",
             }
 
-        # --- normalize context (may be a string) and extend it
         base_ctx = action.get("context") or {}
         if isinstance(base_ctx, str):
             try:
                 base_ctx = safe_eval(base_ctx) or {}
             except Exception:
                 base_ctx = {}
-        base_ctx.update({
-            "default_sale_order_id": self.id,
-        })
+        base_ctx.update({"default_sale_order_id": self.id})
         action["context"] = base_ctx
 
-        # --- normalize domain (may be a string) and extend it
         dom = action.get("domain") or []
         if isinstance(dom, str):
             try:
@@ -132,22 +162,8 @@ class SaleOrder(models.Model):
         action["domain"] = dom
 
         return action
-    
 
-    def _trakka_ensure_dispatch(self):
-        Dispatch = self.env["trakka.dispatch.order"].with_company(self.company_id)
-        for so in self:
-            exists = Dispatch.search([("sale_order_id", "=", so.id)], limit=1)
-            if exists:
-                continue
-            Dispatch.create({
-                "sale_order_id": so.id,
-                "company_id": so.company_id.id,
-                # distance/weight can be computed later; pricing will still run
-            })
-
-    def action_confirm(self):
-        res = super().action_confirm()
-        # Create dispatch(es) for confirmed orders
-        self._trakka_ensure_dispatch()
-        return res
+    # IMPORTANT: no auto-dispatch on confirm anymore
+    # def action_confirm(self):
+    #     res = super().action_confirm()
+    #     return res

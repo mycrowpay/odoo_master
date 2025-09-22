@@ -8,7 +8,9 @@ class TrakkaPayguardEscrow(models.Model):
     _description = "PayGuard Escrow"
     _inherit = ["mail.thread", "mail.activity.mixin"]
 
-    # Human-meaningful sequence (ESC/%(year)s/%(month)s/%(seq))
+    # -------------------------------------------------
+    # Identity / linkage
+    # -------------------------------------------------
     name = fields.Char(
         default=lambda self: self.env["ir.sequence"].next_by_code("trakka.payguard.escrow"),
         readonly=True,
@@ -16,7 +18,6 @@ class TrakkaPayguardEscrow(models.Model):
         tracking=True,
     )
 
-    # IMPORTANT: real field with default so check_company on sale_order_id works immediately
     company_id = fields.Many2one(
         "res.company",
         required=True,
@@ -25,7 +26,6 @@ class TrakkaPayguardEscrow(models.Model):
         tracking=True,
     )
 
-    # Only allow escrows for confirmed/done SO; auto-filtered by company_id as well
     sale_order_id = fields.Many2one(
         "sale.order",
         required=True,
@@ -36,7 +36,6 @@ class TrakkaPayguardEscrow(models.Model):
         tracking=True,
     )
 
-    # Related helpers from SO (stored for reporting)
     currency_id = fields.Many2one(
         "res.currency",
         related="sale_order_id.currency_id",
@@ -51,6 +50,7 @@ class TrakkaPayguardEscrow(models.Model):
     )
 
     amount = fields.Monetary(required=True, tracking=True, copy=False)
+
     state = fields.Selection(
         [
             ("held", "Held"),
@@ -66,7 +66,35 @@ class TrakkaPayguardEscrow(models.Model):
     account_move_id = fields.Many2one("account.move", readonly=True, copy=False)
     wallet_move_id = fields.Many2one("trakka.wallet.move", readonly=True, copy=False)
 
-    # ======== Smart-button helpers (computed, not stored) ========
+    # -------------------------------------------------
+    # Release policy / audit (NEW)
+    # -------------------------------------------------
+    release_policy = fields.Selection(
+        [
+            ("manual", "Manual"),
+            ("auto_on_delivery", "Auto on Delivery"),
+            ("auto_after_cooldown", "Auto after Cooldown"),
+        ],
+        default="manual",
+        required=True,
+        tracking=True,
+        help="How funds should be released for this escrow.",
+    )
+    release_cooldown_days = fields.Integer(
+        default=0,
+        help="If policy is 'Auto after Cooldown', wait this many days after marking Release Ready.",
+    )
+    release_ready_at = fields.Datetime(readonly=True, tracking=True)
+    released_at = fields.Datetime(readonly=True, tracking=True)
+
+    allow_manual_override = fields.Boolean(
+        help="Permit a FinOps manager to force Release Ready from Held."
+    )
+    override_reason = fields.Char()
+
+    # -------------------------------------------------
+    # Smart-button helpers (computed, not stored)
+    # -------------------------------------------------
     sale_order_count = fields.Integer(
         compute="_compute_links_counts", string="Sale Order(s)"
     )
@@ -98,39 +126,32 @@ class TrakkaPayguardEscrow(models.Model):
     )
 
     _sql_constraints = [
-        # One escrow per SO (across the DB); SO is already company-scoped
         ("uniq_escrow_so", "unique(sale_order_id)", "An escrow already exists for this Sales Order."),
-        # Allow multiple NULLs; but if you use keys, they must be unique
         ("uniq_escrow_idempotency", "unique(idempotency_key)", "Duplicate idempotency key."),
     ]
 
-    # -----------------------
+    # -------------------------------------------------
     # Lifecycle guards
-    # -----------------------
+    # -------------------------------------------------
     @api.model
     def create(self, vals):
-        # Snap company/amount from SO if not explicitly passed
         so_id = vals.get("sale_order_id")
         if so_id:
             so = self.env["sale.order"].browse(so_id)
             vals.setdefault("company_id", so.company_id.id)
             vals.setdefault("amount", so.amount_total or 0.0)
 
-        # Disallow non-positive amounts
         if not vals.get("amount") or vals["amount"] <= 0.0:
             raise ValidationError(_("Escrow amount must be greater than zero."))
 
         rec = super().create(vals)
-        # Pre-fill idempotency key (useful for batch/cron re-runs)
         rec._ensure_idempotency_key()
         return rec
 
     def write(self, vals):
-        # No changing the SO ever (prevents “moving” escrows)
         if "sale_order_id" in vals:
             raise ValidationError(_("You cannot change the Sales Order of an existing Escrow."))
 
-        # Amount becomes immutable once we’re preparing to release (and after)
         if "amount" in vals and any(r.state != "held" for r in self):
             raise ValidationError(_("You can only change the amount while Escrow is in Held."))
 
@@ -144,24 +165,21 @@ class TrakkaPayguardEscrow(models.Model):
                 raise ValidationError(_("You cannot delete an Escrow that has posted accounting or wallet moves."))
         return super().unlink()
 
-    # -----------------------
-    # Helpers
-    # -----------------------
+    # -------------------------------------------------
+    # Helpers / onchange / computes
+    # -------------------------------------------------
     def _ensure_idempotency_key(self):
         for rec in self:
             if not rec.idempotency_key:
-                rec.idempotency_key = f"escrow:{rec.id}:release:{int(rec.amount * 100)}"
+                cents = int((rec.amount or 0.0) * 100)
+                rec.idempotency_key = f"escrow:{rec.id}:release:{cents}"
 
     @api.onchange("sale_order_id")
     def _onchange_sale_order_id(self):
-        """Prefill amount and snap company to the SO's company."""
         if self.sale_order_id:
             self.company_id = self.sale_order_id.company_id
             self.amount = self.sale_order_id.amount_total or 0.0
 
-    # -----------------------
-    # Smart-button computes
-    # -----------------------
     @api.depends("sale_order_id")
     def _compute_links_counts(self):
         Dispatch = self.env["trakka.dispatch.order"].sudo()
@@ -187,22 +205,32 @@ class TrakkaPayguardEscrow(models.Model):
             if rec.sale_order_id:
                 last = Dispatch.search(
                     [("sale_order_id", "=", rec.sale_order_id.id)],
-                    order="id desc", limit=1
+                    order="id desc",
+                    limit=1,
                 )
                 rec.latest_dispatch_id = last.id if last else False
                 rec.latest_dispatch_state = last.state if last else False
 
-    # -----------------------
+    # -------------------------------------------------
     # State transitions
-    # -----------------------
+    # -------------------------------------------------
     def action_set_release_ready(self):
         for rec in self:
             if rec.state != "held":
-                # prevent accidental toggling backwards/sideways
                 raise ValidationError(_("Only Held escrows can be marked Release Ready."))
             if not rec.amount or rec.amount <= 0.0:
                 raise ValidationError(_("Escrow amount must be greater than zero."))
-            rec.state = "released_ready"
+
+            rec.write({
+                "state": "released_ready",
+                "release_ready_at": fields.Datetime.now(),
+            })
+
+            # Optional inline auto-release behaviors
+            if rec.release_policy == "auto_on_delivery":
+                if rec.latest_dispatch_state == "delivered":
+                    rec.action_post_settlement_move()
+            # For 'auto_after_cooldown', cron will handle it later.
 
     def _get_required_journals(self):
         """Return (ESC, WLT) journals for this record's company."""
@@ -211,19 +239,13 @@ class TrakkaPayguardEscrow(models.Model):
         wlt = self.env["account.journal"].with_company(company).search([("code", "=", "WLT")], limit=1)
         return esc, wlt
 
-    # -----------------------
+    # -------------------------------------------------
     # Settlement (idempotent)
-    # -----------------------
+    # -------------------------------------------------
     def action_post_settlement_move(self):
-        """Dr ESC liability / Cr WLT liability, then credit Wallet and mark released.
-
-        Idempotent: if already released, return cleanly (no duplicate moves).
-        """
         self.ensure_one()
 
-        # Already released? be idempotent.
         if self.state == "released":
-            # Nothing to do; keep method idempotent
             return True
 
         if self.state != "released_ready":
@@ -246,13 +268,11 @@ class TrakkaPayguardEscrow(models.Model):
             raise ValidationError(_("Please configure default accounts on ESC and WLT journals."))
 
         company = self.company_id
-        # Create + post JE (sudo to avoid user-specific accounting perms blocking ops)
         move_vals = {
             "journal_id": esc_journal.id,
             "date": fields.Date.context_today(self),
             "ref": self.name,
             "line_ids": [
-                # Dr ESC Liability
                 (0, 0, {
                     "name": _("Escrow Release %s") % self.name,
                     "account_id": esc_journal.default_account_id.id,
@@ -261,7 +281,6 @@ class TrakkaPayguardEscrow(models.Model):
                     "partner_id": partner.id,
                     "company_id": company.id,
                 }),
-                # Cr WLT Liability
                 (0, 0, {
                     "name": _("Wallet Credit %s") % self.name,
                     "account_id": wlt_journal.default_account_id.id,
@@ -276,7 +295,6 @@ class TrakkaPayguardEscrow(models.Model):
         move = self.env["account.move"].with_company(company).sudo().create(move_vals)
         move.sudo().with_company(company).action_post()
 
-        # Credit seller wallet (sudo so ACLs don’t block ops/cron)
         wallet = self.env["trakka.wallet"].with_company(company)._ensure_partner_wallet(partner)
         wmove = self.env["trakka.wallet.move"].with_company(company).sudo().create({
             "wallet_id": wallet.id,
@@ -285,20 +303,66 @@ class TrakkaPayguardEscrow(models.Model):
             "ref": self.name,
         })
 
-        # Finalize
         self.write({
             "state": "released",
             "account_move_id": move.id,
             "wallet_move_id": wmove.id,
+            "released_at": fields.Datetime.now(),
         })
         self.message_post(body=_("Settlement posted. JE %s; Wallet credited.") % (move.name or move.id))
         return True
 
-    # -----------------------
+    # -------------------------------------------------
+    # Automated paths
+    # -------------------------------------------------
+    def _try_mark_release_ready(self, trigger="manual"):
+        """Idempotently move Held -> Release Ready when policy & checks allow."""
+        for rec in self.filtered(lambda r: r.state == "held"):
+            if rec.release_policy == "manual" and trigger != "manual":
+                continue
+            if rec.sale_order_id.state in ("cancel", "draft"):
+                continue
+            if rec.latest_dispatch_state == "failed" and not rec.allow_manual_override:
+                continue
+            rec.action_set_release_ready()
+
+    def action_override_mark_release_ready(self):
+        """FinOps override path from Held → Release Ready (with audit)."""
+        for rec in self:
+            if rec.state != "held":
+                raise ValidationError(_("Escrow is not in Held."))
+            if not rec.override_reason:
+                raise ValidationError(_("Provide an override reason first."))
+            rec.allow_manual_override = True
+            rec.message_post(body=_("FinOps override to Release Ready. Reason: %s") % rec.override_reason)
+            rec.action_set_release_ready()
+
+    @api.model
+    def cron_auto_settle_ready_escrows(self):
+        """Cron: settle Release Ready escrows if cooldown elapsed (for auto_after_cooldown)."""
+        now = fields.Datetime.now()
+        ready = self.search([("state", "=", "released_ready")])
+        for rec in ready:
+            # If policy isn't cooldown-based, skip (manual & delivered are handled elsewhere)
+            if rec.release_policy != "auto_after_cooldown":
+                continue
+            if not rec.release_ready_at:
+                continue
+            if rec.release_cooldown_days and rec.release_cooldown_days > 0:
+                delta = now - rec.release_ready_at
+                if delta.days < rec.release_cooldown_days:
+                    continue
+            # Try settling; don't crash the cron
+            try:
+                rec.with_context(trakka_skip_sms=True).action_post_settlement_move()
+            except Exception as e:
+                rec.message_post(body=_("Auto-settle failed: %s") % e)
+
+    # -------------------------------------------------
     # Smart-button actions
-    # -----------------------
+    # -------------------------------------------------
     def action_view_sale_order(self):
-        """Open the linked Sale Order."""
+        """Open the linked Sales Order."""
         self.ensure_one()
         if not self.sale_order_id:
             raise UserError(_("No Sales Order is linked to this Escrow."))
@@ -306,30 +370,29 @@ class TrakkaPayguardEscrow(models.Model):
             "type": "ir.actions.act_window",
             "name": _("Sales Order"),
             "res_model": "sale.order",
-            "view_mode": "form,tree",
+            "view_mode": "form",
             "target": "current",
             "res_id": self.sale_order_id.id,
-            "domain": [("id", "=", self.sale_order_id.id)],
             "context": {},
         }
 
     def action_view_dispatches(self):
-        """Open Dispatch Orders for this escrow's SO (single → form; multiple → list)."""
+        """Open Dispatch Orders for this escrow's Sales Order."""
         self.ensure_one()
         if not self.sale_order_id:
             raise UserError(_("Link a Sales Order first to see its dispatches."))
-        Dispatch = self.env["trakka.dispatch.order"].sudo()
         domain = [("sale_order_id", "=", self.sale_order_id.id)]
-        dispatches = Dispatch.search(domain)
         action = {
             "type": "ir.actions.act_window",
-            "name": _("Dispatch Orders"),
+            "name": _("Dispatches"),
             "res_model": "trakka.dispatch.order",
             "view_mode": "tree,form",
             "target": "current",
             "domain": domain,
             "context": {"default_sale_order_id": self.sale_order_id.id},
         }
+        # If exactly one dispatch, open it directly
+        dispatches = self.env["trakka.dispatch.order"].sudo().search(domain, limit=2)
         if len(dispatches) == 1:
             action["res_id"] = dispatches.id
             action["view_mode"] = "form,tree"
