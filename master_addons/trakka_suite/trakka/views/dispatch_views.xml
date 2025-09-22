@@ -1,91 +1,129 @@
+<?xml version="1.0" encoding="UTF-8"?>
 <odoo>
-  <!-- Action + Menu -->
-  <record id="action_trakka_dispatch_orders" model="ir.actions.act_window">
-    <field name="name">Dispatch Orders</field>
-    <field name="res_model">trakka.dispatch.order</field>
-    <field name="view_mode">tree,form</field>
-  </record>
 
-  <menuitem id="menu_trakka_dispatch_orders"
-            parent="trakka.menu_trakka_ops_root"
-            action="trakka.action_trakka_dispatch_orders"
-            sequence="20"/>
-
-  <!-- Tree View -->
+  <!-- ===================== Tree View ===================== -->
   <record id="view_trakka_dispatch_tree" model="ir.ui.view">
     <field name="name">trakka.dispatch.order.tree</field>
     <field name="model">trakka.dispatch.order</field>
     <field name="arch" type="xml">
-      <tree>
+      <tree string="Dispatch Orders">
         <field name="name"/>
         <field name="sale_order_id"/>
         <field name="assigned_partner_id"/>
+        <field name="provider_type"/>
         <field name="state"/>
-        <field name="quoted_fee"/>
+        <field name="delivered_at"/>
+        <field name="company_id"/>
       </tree>
     </field>
   </record>
 
-  <!-- Form View (v17: use modifiers, include company_id for domain validation) -->
+  <!-- ===================== Search View ===================== -->
+  <record id="view_trakka_dispatch_search" model="ir.ui.view">
+    <field name="name">trakka.dispatch.order.search</field>
+    <field name="model">trakka.dispatch.order</field>
+    <field name="arch" type="xml">
+      <search string="Search Dispatch Orders">
+        <field name="name"/>
+        <field name="sale_order_id"/>
+        <field name="assigned_partner_id"/>
+        <field name="provider_type"/>
+        <field name="state"/>
+        <field name="company_id"/>
+
+        <filter string="New" name="state_new" domain="[('state','=','new')]"/>
+        <filter string="Assigned" name="state_assigned" domain="[('state','=','assigned')]"/>
+        <filter string="Accepted" name="state_accepted" domain="[('state','=','accepted')]"/>
+        <filter string="Picked" name="state_picked" domain="[('state','=','picked')]"/>
+        <filter string="On Route" name="state_onroute" domain="[('state','=','on_route')]"/>
+        <filter string="Delivered" name="state_delivered" domain="[('state','=','delivered')]"/>
+        <filter string="Failed" name="state_failed" domain="[('state','=','failed')]"/>
+
+        <group expand="0" string="Group By">
+          <filter string="State" name="grp_state" context="{'group_by':'state'}"/>
+          <filter string="Provider Type" name="grp_provider" context="{'group_by':'provider_type'}"/>
+          <filter string="Assigned To" name="grp_assigned" context="{'group_by':'assigned_partner_id'}"/>
+          <filter string="Company" name="grp_company" context="{'group_by':'company_id'}"/>
+        </group>
+      </search>
+    </field>
+  </record>
+
+  <!-- ===================== Form View (Odoo 17: use modifiers, not attrs/states) ===================== -->
   <record id="view_trakka_dispatch_form" model="ir.ui.view">
     <field name="name">trakka.dispatch.order.form</field>
     <field name="model">trakka.dispatch.order</field>
     <field name="arch" type="xml">
-      <form>
+      <form string="Dispatch Order">
         <header>
-          <button name="action_assign"
-                  type="object"
-                  string="Assign"
+          <button name="action_assign" type="object" string="Assign"
                   modifiers="{'invisible': [('state','!=','new')]}"/>
-
-          <button name="action_accept"
-                  type="object"
-                  string="Accept"
+          <button name="action_accept" type="object" string="Accept"
                   modifiers="{'invisible': [('state','!=','assigned')]}"/>
-
-          <button name="action_pick"
-                  type="object"
-                  string="Picked"
-                  modifiers="{'invisible': [('state','not in',['accepted','assigned'])]}"/>
-
-          <button name="action_on_route"
-                  type="object"
-                  string="On Route"
+          <button name="action_pick" type="object" string="Pick"
+                  modifiers="{'invisible': [('state','!=','accepted')]}"/>
+          <button name="action_on_route" type="object" string="On Route"
                   modifiers="{'invisible': [('state','!=','picked')]}"/>
+          <button name="action_deliver" type="object" string="Deliver" class="btn-primary"
+                  modifiers="{'invisible': [('state','in',['delivered','failed','new'])]}"/>
+          <button name="action_fail" type="object" string="Fail"
+                  modifiers="{'invisible': [('state','in',['delivered','failed'])]}"/>
 
-          <button name="action_delivered"
-                  type="object"
-                  string="Delivered"
-                  class="oe_highlight"
-                  modifiers="{'invisible': [('state','not in',['on_route','picked','accepted'])]}"/>
+          <!-- Attachments stat button (from mail.thread) -->
+          <button name="action_open_attachments" type="object" class="oe_stat_button" icon="fa-paperclip">
+            <field name="message_attachment_count" widget="statinfo" string="Files"/>
+          </button>
 
           <field name="state" widget="statusbar"/>
         </header>
 
         <sheet>
           <group>
-            <!-- Needed because sale_order_id has check_company=True -->
-            <field name="company_id" readonly="1" modifiers="{'invisible': true}"/>
+            <group>
+              <field name="name" readonly="1"/>
+              <field name="company_id" readonly="1"/>
+              <field name="sale_order_id" options="{'no_create': True}"/>
+              <field name="provider_type"/>
+              <field name="assigned_partner_id"/>
+            </group>
+            <group>
+              <field name="buyer_contact_name"/>
+              <field name="buyer_contact_phone"/>
+              <field name="pickup_address"/>
+              <field name="dropoff_address"/>
+            </group>
+          </group>
 
-            <field name="name" readonly="1"/>
-            <field name="sale_order_id"/>
-            <field name="assigned_partner_id"/>
-            <field name="provider_type"/>
-            <field name="buyer_name"/>
-            <field name="buyer_phone"/>
-            <field name="pickup_address"/>
-            <field name="dropoff_address"/>
+          <group string="Logistics">
             <field name="distance_km"/>
             <field name="weight_kg"/>
             <field name="quoted_fee" readonly="1"/>
+          </group>
+
+          <group string="Proof of Delivery">
             <field name="proof_type"/>
-            <field name="proof_value"/>
-            <field name="delivered_at" readonly="1"
-                   modifiers="{'invisible': [('state','!=','delivered')]}"/>
+            <field name="proof_value" modifiers="{'invisible': [('proof_type','!=','otp')]}"/>
+            <field name="delivered_at" readonly="1"/>
+            <field name="fail_reason" modifiers="{'invisible': [('state','!=','failed')]}"/>
+            <field name="rating"/>
           </group>
         </sheet>
+
+        <!-- Odoo 17 chatter -->
         <chatter/>
       </form>
     </field>
   </record>
+
+  <!-- ===================== Action ===================== -->
+  <record id="action_trakka_dispatch_orders" model="ir.actions.act_window">
+    <field name="name">Dispatch Orders</field>
+    <field name="res_model">trakka.dispatch.order</field>
+    <field name="view_mode">tree,form</field>
+    <field name="context">{}</field>
+    <field name="help" type="html">
+      <p>Create and track last-mile dispatch orders linked to Sales Orders.</p>
+    </field>
+  </record>
+
 </odoo>

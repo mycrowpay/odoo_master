@@ -1,62 +1,17 @@
 <odoo>
-  <!-- Escrow visibility (company-scoped) -->
-  <record id="rr_trakka_escrow_company_user" model="ir.rule">
-    <field name="name">Escrow by Company (User)</field>
-    <field name="model_id" ref="model_trakka_payguard_escrow"/>
-    <field name="domain_force">[('company_id','in',user.company_ids.ids)]</field>
-    <field name="groups" eval="[(4, ref('trakka.group_trakka_finops_user'))]"/>
-  </record>
-
-  <record id="rr_trakka_escrow_company_manager" model="ir.rule">
-    <field name="name">Escrow by Company (Manager)</field>
-    <field name="model_id" ref="model_trakka_payguard_escrow"/>
-    <field name="domain_force">[('company_id','in',user.company_ids.ids)]</field>
-    <field name="groups" eval="[(4, ref('trakka.group_trakka_finops_manager'))]"/>
-  </record>
-
-  <!-- Wallets (company-scoped) -->
-  <record id="rr_trakka_wallet_company_user" model="ir.rule">
-    <field name="name">Wallet by Company (User)</field>
-    <field name="model_id" ref="model_trakka_wallet"/>
-    <field name="domain_force">[('company_id','in',user.company_ids.ids)]</field>
-    <field name="groups" eval="[(4, ref('trakka.group_trakka_finops_user'))]"/>
-  </record>
-
-  <record id="rr_trakka_wallet_company_manager" model="ir.rule">
-    <field name="name">Wallet by Company (Manager)</field>
-    <field name="model_id" ref="model_trakka_wallet"/>
-    <field name="domain_force">[('company_id','in',user.company_ids.ids)]</field>
-    <field name="groups" eval="[(4, ref('trakka.group_trakka_finops_manager'))]"/>
-  </record>
-
-  <record id="rr_trakka_wallet_move_company_user" model="ir.rule">
-    <field name="name">Wallet Move by Company (User)</field>
-    <field name="model_id" ref="model_trakka_wallet_move"/>
-    <field name="domain_force">[('company_id','in',user.company_ids.ids)]</field>
-    <field name="groups" eval="[(4, ref('trakka.group_trakka_finops_user'))]"/>
-  </record>
-
-  <!-- Settlement batches (manager only, company-scoped) -->
-  <record id="rr_trakka_settlement_company_manager" model="ir.rule">
-    <field name="name">Settlement Batch by Company (Manager)</field>
-    <field name="model_id" ref="model_trakka_settlement_batch"/>
-    <field name="domain_force">[('company_id','in',user.company_ids.ids)]</field>
-    <field name="groups" eval="[(4, ref('trakka.group_trakka_finops_manager'))]"/>
-  </record>
-
-  <!-- Dispatch visibility -->
-  <record id="rr_trakka_dispatch_company_ops" model="ir.rule">
-    <field name="name">Dispatch by Company (Ops)</field>
+  <!-- Ops: full company scope -->
+  <record id="rule_trakka_dispatch_ops" model="ir.rule">
+    <field name="name">Dispatch: Ops see company</field>
     <field name="model_id" ref="model_trakka_dispatch_order"/>
-    <field name="domain_force">[('company_id','in',user.company_ids.ids)]</field>
     <field name="groups" eval="[(4, ref('trakka.group_trakka_ops'))]"/>
+    <field name="domain_force">[('company_id','in', user.company_ids.ids)]</field>
   </record>
 
-  <!-- Riders only see their own assigned jobs -->
-  <record id="rr_trakka_dispatch_rider_self" model="ir.rule">
-    <field name="name">Dispatch Rider Self</field>
+  <!-- Rider: only jobs assigned to their partner -->
+  <record id="rule_trakka_dispatch_rider" model="ir.rule">
+    <field name="name">Dispatch: Rider sees own</field>
     <field name="model_id" ref="model_trakka_dispatch_order"/>
-    <field name="domain_force">[('assigned_partner_id','=',user.partner_id.id)]</field>
     <field name="groups" eval="[(4, ref('trakka.group_trakka_rider'))]"/>
+    <field name="domain_force">[('assigned_partner_id','=', user.partner_id.id)]</field>
   </record>
 </odoo>

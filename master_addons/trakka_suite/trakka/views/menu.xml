@@ -4,4 +4,9 @@
   <menuitem id="menu_trakka_finops_root" name="FinOps" parent="menu_trakka_root" sequence="10"/>
   <menuitem id="menu_trakka_ops_root"    name="Operations" parent="menu_trakka_root" sequence="20"/>
   <menuitem id="menu_trakka_pulse_root"  name="Pulse (Riders)" parent="menu_trakka_root" sequence="30"/>
+  <menuitem id="menu_trakka_dispatch_orders"
+          name="Dispatch Orders"
+          parent="menu_trakka_ops_root"
+          action="trakka.action_trakka_dispatch_orders"
+          sequence="10"/>
 </odoo>

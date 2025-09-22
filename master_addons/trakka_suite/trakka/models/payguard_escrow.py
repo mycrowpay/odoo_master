@@ -16,7 +16,7 @@ class TrakkaPayguardEscrow(models.Model):
         tracking=True,
     )
 
-    # IMPORTANT: real field with default so check_company on sale_order_id can work immediately
+    # IMPORTANT: real field with default so check_company on sale_order_id works immediately
     company_id = fields.Many2one(
         "res.company",
         required=True,
@@ -25,16 +25,18 @@ class TrakkaPayguardEscrow(models.Model):
         tracking=True,
     )
 
-    # Filters by company_id automatically thanks to check_company=True
+    # Only allow escrows for confirmed/done SO; auto-filtered by company_id as well
     sale_order_id = fields.Many2one(
         "sale.order",
         required=True,
         check_company=True,
         index=True,
+        copy=False,
+        domain=[("state", "in", ["sale", "done"])],
         tracking=True,
     )
 
-    # Related helpers from SO
+    # Related helpers from SO (stored for reporting)
     currency_id = fields.Many2one(
         "res.currency",
         related="sale_order_id.currency_id",
@@ -48,7 +50,7 @@ class TrakkaPayguardEscrow(models.Model):
         readonly=True,
     )
 
-    amount = fields.Monetary(required=True, tracking=True)
+    amount = fields.Monetary(required=True, tracking=True, copy=False)
     state = fields.Selection(
         [
             ("held", "Held"),
@@ -60,13 +62,65 @@ class TrakkaPayguardEscrow(models.Model):
         index=True,
     )
 
-    idempotency_key = fields.Char(index=True)
-    account_move_id = fields.Many2one("account.move", readonly=True)
-    wallet_move_id = fields.Many2one("trakka.wallet.move", readonly=True)
+    idempotency_key = fields.Char(index=True, copy=False)
+    account_move_id = fields.Many2one("account.move", readonly=True, copy=False)
+    wallet_move_id = fields.Many2one("trakka.wallet.move", readonly=True, copy=False)
+
+    _sql_constraints = [
+        # One escrow per SO (across the DB); SO is already company-scoped
+        ("uniq_escrow_so", "unique(sale_order_id)", "An escrow already exists for this Sales Order."),
+        # Allow multiple NULLs; but if you use keys, they must be unique
+        ("uniq_escrow_idempotency", "unique(idempotency_key)", "Duplicate idempotency key."),
+    ]
 
     # -----------------------
-    # Onchanges / helpers
+    # Lifecycle guards
     # -----------------------
+    @api.model
+    def create(self, vals):
+        # Snap company/amount from SO if not explicitly passed
+        so_id = vals.get("sale_order_id")
+        if so_id:
+            so = self.env["sale.order"].browse(so_id)
+            vals.setdefault("company_id", so.company_id.id)
+            vals.setdefault("amount", so.amount_total or 0.0)
+
+        # Disallow non-positive amounts
+        if not vals.get("amount") or vals["amount"] <= 0.0:
+            raise ValidationError(_("Escrow amount must be greater than zero."))
+
+        rec = super().create(vals)
+        # Pre-fill idempotency key (useful for batch/cron re-runs)
+        rec._ensure_idempotency_key()
+        return rec
+
+    def write(self, vals):
+        # No changing the SO ever (prevents “moving” escrows)
+        if "sale_order_id" in vals:
+            raise ValidationError(_("You cannot change the Sales Order of an existing Escrow."))
+
+        # Amount becomes immutable once we’re preparing to release (and after)
+        if "amount" in vals and any(r.state != "held" for r in self):
+            raise ValidationError(_("You can only change the amount while Escrow is in Held."))
+
+        return super().write(vals)
+
+    def unlink(self):
+        for rec in self:
+            if rec.state != "held":
+                raise ValidationError(_("You can only delete Escrows in Held state."))
+            if rec.account_move_id or rec.wallet_move_id:
+                raise ValidationError(_("You cannot delete an Escrow that has posted accounting or wallet moves."))
+        return super().unlink()
+
+    # -----------------------
+    # Helpers
+    # -----------------------
+    def _ensure_idempotency_key(self):
+        for rec in self:
+            if not rec.idempotency_key:
+                rec.idempotency_key = f"escrow:{rec.id}:release:{int(rec.amount * 100)}"
+
     @api.onchange("sale_order_id")
     def _onchange_sale_order_id(self):
         """Prefill amount and snap company to the SO's company."""
@@ -74,8 +128,16 @@ class TrakkaPayguardEscrow(models.Model):
             self.company_id = self.sale_order_id.company_id
             self.amount = self.sale_order_id.amount_total or 0.0
 
+    # -----------------------
+    # State transitions
+    # -----------------------
     def action_set_release_ready(self):
         for rec in self:
+            if rec.state != "held":
+                # prevent accidental toggling backwards/sideways
+                raise ValidationError(_("Only Held escrows can be marked Release Ready."))
+            if not rec.amount or rec.amount <= 0.0:
+                raise ValidationError(_("Escrow amount must be greater than zero."))
             rec.state = "released_ready"
 
     def _get_required_journals(self):
@@ -86,23 +148,32 @@ class TrakkaPayguardEscrow(models.Model):
         return esc, wlt
 
     # -----------------------
-    # Settlement
+    # Settlement (idempotent)
     # -----------------------
     def action_post_settlement_move(self):
-        """Dr ESC liability / Cr WLT liability, then credit Wallet and mark released."""
+        """Dr ESC liability / Cr WLT liability, then credit Wallet and mark released.
+
+        Idempotent: if already released, return cleanly (no duplicate moves).
+        """
         self.ensure_one()
+
+        # Already released? be idempotent.
+        if self.state == "released":
+            # Nothing to do; keep method idempotent
+            return True
 
         if self.state != "released_ready":
             raise ValidationError(_("Escrow must be Release Ready before settlement."))
 
         partner = self.sale_order_id.partner_id
-
-        # Phone validation (to avoid downstream SMS errors in your flows)
         if not (partner.mobile or partner.phone) and not self.env.context.get("trakka_skip_sms"):
             raise ValidationError(
                 _("Customer phone/mobile is required to post settlement. "
                   "Please add it on the Sales Order customer.")
             )
+
+        if not self.amount or self.amount <= 0.0:
+            raise ValidationError(_("Escrow amount must be greater than zero."))
 
         esc_journal, wlt_journal = self._get_required_journals()
         if not esc_journal or not wlt_journal:
@@ -110,12 +181,8 @@ class TrakkaPayguardEscrow(models.Model):
         if not esc_journal.default_account_id or not wlt_journal.default_account_id:
             raise ValidationError(_("Please configure default accounts on ESC and WLT journals."))
 
-        if not self.amount or self.amount <= 0.0:
-            raise ValidationError(_("Escrow amount must be greater than zero."))
-
         company = self.company_id
-
-        # Single JE posted in the ESC journal; lines use ESC & WLT default accounts
+        # Create + post JE (sudo to avoid user-specific accounting perms blocking ops)
         move_vals = {
             "journal_id": esc_journal.id,
             "date": fields.Date.context_today(self),
@@ -142,21 +209,19 @@ class TrakkaPayguardEscrow(models.Model):
             ],
             "company_id": company.id,
         }
+        move = self.env["account.move"].with_company(company).sudo().create(move_vals)
+        move.sudo().with_company(company).action_post()
 
-        move = self.env["account.move"].with_company(company).create(move_vals)
-        move.with_company(company).action_post()
-
-        # Credit seller wallet
+        # Credit seller wallet (sudo so ACLs don’t block ops/cron)
         wallet = self.env["trakka.wallet"].with_company(company)._ensure_partner_wallet(partner)
-        wmove = self.env["trakka.wallet.move"].with_company(company).create({
+        wmove = self.env["trakka.wallet.move"].with_company(company).sudo().create({
             "wallet_id": wallet.id,
-            "partner_id": partner.id,
             "amount": self.amount,
             "direction": "in",
             "ref": self.name,
-            "company_id": company.id,
         })
 
+        # Finalize
         self.write({
             "state": "released",
             "account_move_id": move.id,

@@ -15,11 +15,12 @@
       <field name="padding">5</field>
     </record>
 
+    <!-- Dispatch Order sequence -->
     <record id="seq_trakka_dispatch_order" model="ir.sequence">
-      <field name="name">Trakka Dispatch Order</field>
+      <field name="name">Trakka Dispatch</field>
       <field name="code">trakka.dispatch.order</field>
-      <field name="prefix">DSP-%(y)s-</field>
-      <field name="padding">5</field>
+      <field name="prefix">DSP/%(year)s/%(month)s/</field>
+      <field name="padding">4</field>
     </record>
   </data>
 </odoo>
