@@ -1,0 +1,40 @@
+<odoo>
+  <record id="action_trakka_riders" model="ir.actions.act_window">
+    <field name="name">Riders</field>
+    <field name="res_model">trakka.rider</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+  <menuitem id="menu_trakka_riders" parent="menu_trakka_pulse_root" action="action_trakka_riders" sequence="10"/>
+
+  <record id="view_trakka_rider_tree" model="ir.ui.view">
+    <field name="name">trakka.rider.tree</field>
+    <field name="model">trakka.rider</field>
+    <field name="arch" type="xml">
+      <tree>
+        <field name="partner_id"/>
+        <field name="status"/>
+        <field name="score"/>
+        <field name="completed_deliveries"/>
+      </tree>
+    </field>
+  </record>
+
+  <record id="view_trakka_rider_form" model="ir.ui.view">
+    <field name="name">trakka.rider.form</field>
+    <field name="model">trakka.rider</field>
+    <field name="arch" type="xml">
+      <form>
+        <sheet>
+          <group>
+            <field name="partner_id"/>
+            <field name="status"/>
+            <field name="score" readonly="1"/>
+            <field name="completed_deliveries" readonly="1"/>
+            <field name="kyc_id_doc" filename="kyc_id_doc_filename"/>
+          </group>
+        </sheet>
+        <chatter/>
+      </form>
+    </field>
+  </record>
+</odoo>

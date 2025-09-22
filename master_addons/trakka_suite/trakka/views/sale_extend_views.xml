@@ -1,0 +1,35 @@
+<odoo>
+  <!-- Extend SO form: add "Create Escrow" + smart buttons -->
+  <record id="view_order_form_trakka_extend" model="ir.ui.view">
+    <field name="name">sale.order.trakka.extend.form</field>
+    <field name="model">sale.order</field>
+    <field name="inherit_id" ref="sale.view_order_form"/>
+    <field name="arch" type="xml">
+      <!-- Header button -->
+      <xpath expr="//header" position="inside">
+        <button name="action_trakka_create_escrow"
+                type="object"
+                string="Create Escrow"
+                class="btn-primary"
+                modifiers="{'invisible': ['|', ('state','not in',['sale','done']), ('trakka_escrow_count','>',0)]}"/>
+      </xpath>
+
+      <!-- Smart buttons -->
+      <xpath expr="//sheet/div[@name='button_box']" position="inside">
+        <button name="action_trakka_view_escrows"
+                type="object"
+                class="oe_stat_button"
+                icon="fa-shield">
+          <field name="trakka_escrow_count" widget="statinfo" string="Escrows"/>
+        </button>
+
+        <button name="action_trakka_view_dispatch"
+                type="object"
+                class="oe_stat_button"
+                icon="fa-motorcycle">
+          <field name="trakka_dispatch_count" widget="statinfo" string="Dispatches"/>
+        </button>
+      </xpath>
+    </field>
+  </record>
+</odoo>

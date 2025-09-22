@@ -1,0 +1,14 @@
+<odoo noupdate="1">
+  <record id="journal_esc_default" model="account.journal">
+    <field name="name">Escrow</field>
+    <field name="code">ESC</field>
+    <field name="type">general</field>
+    <field name="company_id" ref="base.main_company"/>
+  </record>
+  <record id="journal_wlt_default" model="account.journal">
+    <field name="name">Wallet</field>
+    <field name="code">WLT</field>
+    <field name="type">general</field>
+    <field name="company_id" ref="base.main_company"/>
+  </record>
+</odoo>

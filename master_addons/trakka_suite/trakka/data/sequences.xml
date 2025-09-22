@@ -1,0 +1,25 @@
+<?xml version="1.0" encoding="utf-8"?>
+<odoo>
+  <data noupdate="1">
+    <record id="seq_trakka_escrow" model="ir.sequence">
+      <field name="name">Trakka Escrow</field>
+      <field name="code">trakka.payguard.escrow</field>
+      <field name="prefix">ESCR-%(y)s-</field>
+      <field name="padding">5</field>
+    </record>
+
+    <record id="seq_trakka_settlement_batch" model="ir.sequence">
+      <field name="name">Trakka Settlement Batch</field>
+      <field name="code">trakka.settlement.batch</field>
+      <field name="prefix">SEB-%(y)s-</field>
+      <field name="padding">5</field>
+    </record>
+
+    <record id="seq_trakka_dispatch_order" model="ir.sequence">
+      <field name="name">Trakka Dispatch Order</field>
+      <field name="code">trakka.dispatch.order</field>
+      <field name="prefix">DSP-%(y)s-</field>
+      <field name="padding">5</field>
+    </record>
+  </data>
+</odoo>

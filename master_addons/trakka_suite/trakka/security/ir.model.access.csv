@@ -1,0 +1,12 @@
+id,name,model_id:id,group_id:id,perm_read,perm_write,perm_create,perm_unlink
+trakka_acc_escrow_user,Escrow User,model_trakka_payguard_escrow,trakka.group_trakka_finops_user,1,1,1,0
+trakka_acc_escrow_manager,Escrow Manager,model_trakka_payguard_escrow,trakka.group_trakka_finops_manager,1,1,1,1
+trakka_acc_wallet_user,Wallet User,model_trakka_wallet,trakka.group_trakka_finops_user,1,0,0,0
+trakka_acc_wallet_manager,Wallet Manager,model_trakka_wallet,trakka.group_trakka_finops_manager,1,1,1,1
+trakka_acc_wallet_move_user,Wallet Move User,model_trakka_wallet_move,trakka.group_trakka_finops_user,1,0,0,0
+trakka_acc_wallet_move_manager,Wallet Move Manager,model_trakka_wallet_move,trakka.group_trakka_finops_manager,1,1,1,1
+trakka_acc_settlement_batch_manager,Settlement Batch,model_trakka_settlement_batch,trakka.group_trakka_finops_manager,1,1,1,1
+trakka_acc_dispatch_ops,Dispatch Ops,model_trakka_dispatch_order,trakka.group_trakka_ops,1,1,1,1
+trakka_acc_dispatch_rider,Dispatch Rider,model_trakka_dispatch_order,trakka.group_trakka_rider,1,1,0,0
+trakka_acc_pricing_ops,Pricing Ops,model_trakka_delivery_pricing_rule,trakka.group_trakka_ops,1,1,1,1
+trakka_acc_rider_ops,Rider Ops,model_trakka_rider,trakka.group_trakka_ops,1,1,1,1

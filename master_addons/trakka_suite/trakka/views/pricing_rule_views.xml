@@ -1,0 +1,25 @@
+<odoo>
+  <record id="action_trakka_pricing_rules" model="ir.actions.act_window">
+    <field name="name">Delivery Pricing Rules</field>
+    <field name="res_model">trakka.delivery.pricing.rule</field>
+    <field name="view_mode">tree,form</field>
+  </record>
+  <menuitem id="menu_trakka_pricing_rules" parent="menu_trakka_ops_root" action="action_trakka_pricing_rules" sequence="10"/>
+
+  <record id="view_trakka_pricing_rule_tree" model="ir.ui.view">
+    <field name="name">trakka.delivery.pricing.rule.tree</field>
+    <field name="model">trakka.delivery.pricing.rule</field>
+    <field name="arch" type="xml">
+      <tree>
+        <field name="name"/>
+        <field name="company_id"/>
+        <field name="city"/>
+        <field name="base_fee"/>
+        <field name="per_km"/>
+        <field name="per_kg"/>
+        <field name="min_fee"/>
+        <field name="max_fee"/>
+      </tree>
+    </field>
+  </record>
+</odoo>

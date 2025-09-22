@@ -1,0 +1,15 @@
+<odoo>
+  <record id="group_trakka_finops_user" model="res.groups">
+    <field name="name">Trakka / FinOps User</field>
+  </record>
+  <record id="group_trakka_finops_manager" model="res.groups">
+    <field name="name">Trakka / FinOps Manager</field>
+    <field name="implied_ids" eval="[(4, ref('group_trakka_finops_user'))]"/>
+  </record>
+  <record id="group_trakka_ops" model="res.groups">
+    <field name="name">Trakka / Ops</field>
+  </record>
+  <record id="group_trakka_rider" model="res.groups">
+    <field name="name">Trakka / Rider</field>
+  </record>
+</odoo>
