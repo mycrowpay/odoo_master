@@ -24,18 +24,30 @@ class TrakkaDispatchOrder(models.Model):
         default=lambda s: s.env.company,
         index=True,
     )
+
+    # Primary: Delivery Order
+    picking_id = fields.Many2one(
+        "stock.picking",
+        string="Delivery Order",
+        required=True,
+        index=True,
+        domain="[('picking_type_id.code','=','outgoing'), '|', ('company_id','=', False), ('company_id','=', company_id)]",
+        tracking=True,
+        help="Outbound Delivery this dispatch coordinates.",
+    )
+
+    # Secondary (derived)
     sale_order_id = fields.Many2one(
         "sale.order",
         string="Sales Order",
-        required=True,
+        related="picking_id.sale_id",
+        store=True,
+        readonly=True,
         index=True,
-        check_company=True,
-        domain="['|', ('company_id', '=', False), ('company_id', '=', company_id)]",
-        help="SO to be delivered by this dispatch.",
         tracking=True,
     )
 
-    # Computed helper to surface the escrow linked to the SO (not stored)
+    # Escrow helper (computed)
     escrow_id = fields.Many2one(
         "trakka.payguard.escrow",
         compute="_compute_escrow_id",
@@ -43,21 +55,25 @@ class TrakkaDispatchOrder(models.Model):
         readonly=True,
     )
 
-    # Optional seller (merchant) side — keep label distinct from 'Company'
-    seller_id = fields.Many2one(
-        "res.partner",
-        string="Seller",
-        help="Merchant / Seller associated to the order, if applicable.",
-        index=True,
+    # >>> NEW: Related views of the picking’s moves and move lines <<<
+    picking_move_ids = fields.One2many(
+        "stock.move",
+        "picking_id",
+        string="Delivery Moves",
+        related="picking_id.move_ids",
+        readonly=True,
+    )
+    picking_move_line_ids = fields.One2many(
+        "stock.move.line",
+        "picking_id",
+        string="Delivery Move Lines",
+        related="picking_id.move_line_ids",
+        readonly=True,
     )
 
-    # --- dispatch assignment ---
+    # --- assignment / routing / quoting / proof / state (unchanged from your last) ---
     provider_type = fields.Selection(
-        [
-            ("internal", "Internal Fleet"),
-            ("3pl", "3rd Party"),
-            ("gig", "Gig (Rider)"),
-        ],
+        [("internal", "Internal Fleet"), ("3pl", "3rd Party"), ("gig", "Gig (Rider)")],
         string="Provider Type",
         default="internal",
         tracking=True,
@@ -70,14 +86,11 @@ class TrakkaDispatchOrder(models.Model):
         help="Rider / Driver / 3PL partner taking this job.",
         tracking=True,
     )
-
-    # --- consignee / routing ---
     buyer_contact_name = fields.Char(string="Buyer Name")
     buyer_contact_phone = fields.Char(string="Buyer Phone")
     pickup_address = fields.Char()
     dropoff_address = fields.Char()
 
-    # --- logistics metrics / quoting ---
     distance_km = fields.Float(string="Distance (km)")
     weight_kg = fields.Float(string="Weight (kg)")
     quoted_fee = fields.Monetary(
@@ -86,7 +99,6 @@ class TrakkaDispatchOrder(models.Model):
         help="Estimated delivery fee.",
         readonly=True,
     )
-
     currency_id = fields.Many2one(
         "res.currency",
         string="Currency",
@@ -95,14 +107,8 @@ class TrakkaDispatchOrder(models.Model):
         readonly=True,
     )
 
-    # --- proof of delivery ---
     proof_type = fields.Selection(
-        [
-            ("none", "None"),
-            ("otp", "OTP"),
-            ("signature", "Signature"),
-            ("photo", "Photo"),
-        ],
+        [("none", "None"), ("otp", "OTP"), ("signature", "Signature"), ("photo", "Photo")],
         default="none",
         required=True,
         string="Proof Type",
@@ -117,7 +123,6 @@ class TrakkaDispatchOrder(models.Model):
         help="1 (worst) .. 5 (best)",
     )
 
-    # --- states ---
     state = fields.Selection(
         [
             ("new", "New"),
@@ -130,22 +135,14 @@ class TrakkaDispatchOrder(models.Model):
         ],
         default="new",
         tracking=True,
+        index=True,
     )
 
-    # ----------------------------
-    # Constraints / SQL-level
-    # ----------------------------
     _sql_constraints = [
-        (
-            "uniq_so_dispatch",
-            "unique(sale_order_id)",
-            "Each Sales Order can only be linked to one Dispatch Order.",
-        ),
+        ("uniq_dispatch_per_picking", "unique(picking_id)", "A Dispatch already exists for this Delivery Order."),
     ]
 
-    # ----------------------------
-    # Computes
-    # ----------------------------
+    # --- computes / guards / onchange / pricing helpers (as you had) ---
     @api.depends("sale_order_id")
     def _compute_escrow_id(self):
         Escrow = self.env["trakka.payguard.escrow"].sudo()
@@ -155,51 +152,59 @@ class TrakkaDispatchOrder(models.Model):
                 esc = Escrow.search([("sale_order_id", "=", rec.sale_order_id.id)], limit=1)
                 rec.escrow_id = esc.id if esc else False
 
-    # ----------------------------
-    # Server-side guard: require escrow in 'held' to create
-    # ----------------------------
     @api.model
     def create(self, vals):
-        so_id = vals.get("sale_order_id")
-        if not so_id:
-            raise ValidationError(_("Dispatch must be linked to a Sales Order."))
-        Escrow = self.env["trakka.payguard.escrow"].sudo()
-        escrow = Escrow.search([("sale_order_id", "=", so_id)], limit=1)
-        if not escrow:
-            raise ValidationError(_("You must create an Escrow for this Sales Order before creating a Dispatch."))
-        if escrow.state != "held":
-            raise ValidationError(_("Dispatch can be created only when the Escrow is in 'Held' state."))
-        return super().create(vals)
+        picking_id = vals.get("picking_id")
+        if not picking_id:
+            raise ValidationError(_("Dispatch must be linked to a Delivery Order (stock.picking)."))
 
-    # ----------------------------
-    # Onchanges / Defaults
-    # ----------------------------
-    @api.onchange("sale_order_id")
-    def _onchange_sale_order_id(self):
+        picking = self.env["stock.picking"].browse(picking_id)
+        if not picking or picking.picking_type_id.code != "outgoing":
+            raise ValidationError(_("Dispatch can only be created for an outgoing Delivery Order."))
+
+        if picking.company_id and vals.get("company_id") and picking.company_id.id != vals["company_id"]:
+            raise ValidationError(_("Dispatch company must match the Delivery Order company."))
+
+        so = picking.sale_id
+        if not so:
+            raise ValidationError(_("The Delivery Order is not linked to a Sales Order."))
+
+        escrow = self.env["trakka.payguard.escrow"].sudo().search([("sale_order_id", "=", so.id)], limit=1)
+        if not escrow:
+            raise ValidationError(_("Create an Escrow for the Sales Order before creating a Dispatch."))
+        if escrow.state != "held":
+            raise ValidationError(_("Escrow must be in 'Held' to create a Dispatch."))
+
+        vals.setdefault("company_id", picking.company_id.id or self.env.company.id)
+
+        rec = super().create(vals)
+        rec._prefill_from_picking()
+        return rec
+
+    def _prefill_from_picking(self):
         for rec in self:
             so = rec.sale_order_id
-            if not so:
-                continue
-
-            if so.company_id and rec.company_id != so.company_id:
-                rec.company_id = so.company_id
-
-            partner = so.partner_id
+            partner = so.partner_id if so else False
             if partner:
                 rec.buyer_contact_name = rec.buyer_contact_name or partner.display_name
                 phone = partner.mobile or partner.phone or ""
                 rec.buyer_contact_phone = rec.buyer_contact_phone or phone
-
-            if not rec.pickup_address:
+            if so and not rec.pickup_address:
                 rec.pickup_address = (
                     so.warehouse_id
                     and so.warehouse_id.partner_id
                     and so.warehouse_id.partner_id.contact_address
                 ) or ""
-            if not rec.dropoff_address:
-                rec.dropoff_address = partner and partner.contact_address or ""
-
+            if partner and not rec.dropoff_address:
+                rec.dropoff_address = partner.contact_address or ""
             rec._compute_quoted_fee()
+
+    @api.onchange("picking_id")
+    def _onchange_picking_id(self):
+        for rec in self:
+            if rec.picking_id and rec.picking_id.company_id:
+                rec.company_id = rec.picking_id.company_id
+            rec._prefill_from_picking()
 
     @api.onchange("distance_km", "weight_kg", "provider_type")
     def _onchange_quote_inputs(self):
@@ -207,7 +212,6 @@ class TrakkaDispatchOrder(models.Model):
             rec._compute_quoted_fee()
 
     def _compute_quoted_fee(self):
-        """Very simple quoting. If pricing model exists (trakka.pricing.rule) use it; else basic formula."""
         for rec in self:
             amount = 0.0
             if "trakka.pricing.rule" in self.env:
@@ -225,9 +229,6 @@ class TrakkaDispatchOrder(models.Model):
                 amount = (rec.distance_km or 0.0) * 50.0 + (rec.weight_kg or 0.0) * 10.0
             rec.quoted_fee = amount
 
-    # ----------------------------
-    # Actions: lifecycle
-    # ----------------------------
     def _ensure_states(self, allowed):
         for rec in self:
             if rec.state not in allowed:
@@ -262,6 +263,23 @@ class TrakkaDispatchOrder(models.Model):
             rec.state = "on_route"
             rec.message_post(body=_("Rider is on route."))
 
+    def _try_validate_picking(self):
+        for rec in self:
+            picking = rec.picking_id.sudo()
+            if not picking or picking.state in ("done", "cancel"):
+                continue
+            try:
+                result = picking.button_validate()
+                if isinstance(result, dict):
+                    rec.message_post(
+                        body=_("Delivery validation requires a warehouse step (wizard). "
+                               "Please complete the Delivery Order: %s") % (picking.name,)
+                    )
+                else:
+                    rec.message_post(body=_("Delivery Order %s validated.") % (picking.name,))
+            except Exception as e:
+                rec.message_post(body=_("Attempt to validate Delivery Order %s failed: %s") % (picking.name, e))
+
     def action_deliver(self):
         self._ensure_states({"on_route"})
         for rec in self:
@@ -270,10 +288,9 @@ class TrakkaDispatchOrder(models.Model):
             rec.state = "delivered"
             rec.delivered_at = fields.Datetime.now()
             rec.message_post(body=_("Delivered successfully."))
+            rec._try_validate_picking()
 
-            # Nudge escrow -> released_ready if policy allows
-            Escrow = self.env["trakka.payguard.escrow"].sudo()
-            escrow = Escrow.search([("sale_order_id", "=", rec.sale_order_id.id)], limit=1)
+            escrow = rec.escrow_id
             if escrow and escrow.state == "held" and escrow.release_policy in ("auto_on_delivery", "auto_after_cooldown"):
                 try:
                     escrow.action_set_release_ready()
@@ -288,11 +305,21 @@ class TrakkaDispatchOrder(models.Model):
             rec.state = "failed"
             rec.message_post(body=_("Delivery failed: %s") % rec.fail_reason)
 
-    # ----------------------------
-    # Attachments helper (for stat button)
-    # ----------------------------
+    # Smart: open the Delivery Order
+    def action_open_picking(self):
+        self.ensure_one()
+        if not self.picking_id:
+            raise ValidationError(_("No Delivery Order linked."))
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Delivery Order"),
+            "res_model": "stock.picking",
+            "view_mode": "form,tree",
+            "target": "current",
+            "res_id": self.picking_id.id,
+        }
+
     def action_open_attachments(self):
-        """Open ir.attachment filtered on this dispatch record."""
         self.ensure_one()
         return {
             "type": "ir.actions.act_window",

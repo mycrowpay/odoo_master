@@ -75,7 +75,7 @@ class TrakkaPayguardEscrow(models.Model):
             ("auto_on_delivery", "Auto on Delivery"),
             ("auto_after_cooldown", "Auto after Cooldown"),
         ],
-        default="manual",
+        default="auto_on_delivery",
         required=True,
         tracking=True,
         help="How funds should be released for this escrow.",

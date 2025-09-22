@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="UTF-8"?>
 <odoo>
 
-  <!-- ===================== Tree View ===================== -->
+  <!-- Tree -->
   <record id="view_trakka_dispatch_tree" model="ir.ui.view">
     <field name="name">trakka.dispatch.order.tree</field>
     <field name="model">trakka.dispatch.order</field>
@@ -18,7 +18,7 @@
     </field>
   </record>
 
-  <!-- ===================== Search View ===================== -->
+  <!-- Search -->
   <record id="view_trakka_dispatch_search" model="ir.ui.view">
     <field name="name">trakka.dispatch.order.search</field>
     <field name="model">trakka.dispatch.order</field>
@@ -30,46 +30,44 @@
         <field name="provider_type"/>
         <field name="state"/>
         <field name="company_id"/>
-
-        <filter string="New" name="state_new" domain="[('state','=','new')]"/>
-        <filter string="Assigned" name="state_assigned" domain="[('state','=','assigned')]"/>
-        <filter string="Accepted" name="state_accepted" domain="[('state','=','accepted')]"/>
-        <filter string="Picked" name="state_picked" domain="[('state','=','picked')]"/>
-        <filter string="On Route" name="state_onroute" domain="[('state','=','on_route')]"/>
-        <filter string="Delivered" name="state_delivered" domain="[('state','=','delivered')]"/>
-        <filter string="Failed" name="state_failed" domain="[('state','=','failed')]"/>
-
+        <filter string="New"        name="state_new"       domain="[('state','=','new')]"/>
+        <filter string="Assigned"   name="state_assigned"  domain="[('state','=','assigned')]"/>
+        <filter string="Accepted"   name="state_accepted"  domain="[('state','=','accepted')]"/>
+        <filter string="Picked"     name="state_picked"    domain="[('state','=','picked')]"/>
+        <filter string="On Route"   name="state_onroute"   domain="[('state','=','on_route')]"/>
+        <filter string="Delivered"  name="state_delivered" domain="[('state','=','delivered')]"/>
+        <filter string="Failed"     name="state_failed"    domain="[('state','=','failed')]"/>
         <group expand="0" string="Group By">
-          <filter string="State" name="grp_state" context="{'group_by':'state'}"/>
-          <filter string="Provider Type" name="grp_provider" context="{'group_by':'provider_type'}"/>
-          <filter string="Assigned To" name="grp_assigned" context="{'group_by':'assigned_partner_id'}"/>
-          <filter string="Company" name="grp_company" context="{'group_by':'company_id'}"/>
+          <filter string="State"         name="grp_state"     context="{'group_by':'state'}"/>
+          <filter string="Provider Type" name="grp_provider"  context="{'group_by':'provider_type'}"/>
+          <filter string="Assigned To"   name="grp_assigned"  context="{'group_by':'assigned_partner_id'}"/>
+          <filter string="Company"       name="grp_company"   context="{'group_by':'company_id'}"/>
         </group>
       </search>
     </field>
   </record>
 
-  <!-- ===================== Form View (Odoo 17: use modifiers, not attrs/states) ===================== -->
+  <!-- Form -->
   <record id="view_trakka_dispatch_form" model="ir.ui.view">
     <field name="name">trakka.dispatch.order.form</field>
     <field name="model">trakka.dispatch.order</field>
     <field name="arch" type="xml">
       <form string="Dispatch Order">
         <header>
-          <button name="action_assign" type="object" string="Assign"
+          <button name="action_assign"   type="object" string="Assign"
                   modifiers="{'invisible': [('state','!=','new')]}"/>
-          <button name="action_accept" type="object" string="Accept"
+          <button name="action_accept"   type="object" string="Accept"
                   modifiers="{'invisible': [('state','!=','assigned')]}"/>
-          <button name="action_pick" type="object" string="Pick"
+          <button name="action_pick"     type="object" string="Pick"
                   modifiers="{'invisible': [('state','!=','accepted')]}"/>
           <button name="action_on_route" type="object" string="On Route"
                   modifiers="{'invisible': [('state','!=','picked')]}"/>
-          <button name="action_deliver" type="object" string="Deliver" class="btn-primary"
+          <button name="action_deliver"  type="object" string="Deliver" class="btn-primary"
                   modifiers="{'invisible': [('state','in',['delivered','failed','new'])]}"/>
-          <button name="action_fail" type="object" string="Fail"
+          <button name="action_fail"     type="object" string="Fail"
                   modifiers="{'invisible': [('state','in',['delivered','failed'])]}"/>
 
-          <!-- Attachments stat button (from mail.thread) -->
+          <!-- Attachments stat button (mail.thread) -->
           <button name="action_open_attachments" type="object" class="oe_stat_button" icon="fa-paperclip">
             <field name="message_attachment_count" widget="statinfo" string="Files"/>
           </button>
@@ -78,11 +76,22 @@
         </header>
 
         <sheet>
+          <!-- Smart buttons -->
+          <div class="oe_button_box" name="button_box">
+            <!-- Stock Picking (created/linked by Python hooks). Hidden if none. -->
+            <button name="action_open_picking" type="object" class="oe_stat_button" icon="fa-truck"
+                    modifiers="{'invisible': [('picking_id','=',False)]}">
+              <field name="picking_id" invisible="1"/>
+              <field name="name" widget="statinfo" string="Delivery"/>
+            </button>
+          </div>
+
           <group>
             <group>
               <field name="name" readonly="1"/>
               <field name="company_id" readonly="1"/>
               <field name="sale_order_id" options="{'no_create': True}"/>
+              <field name="escrow_id" readonly="1" options="{'no_create': True}"/>
               <field name="provider_type"/>
               <field name="assigned_partner_id"/>
             </group>
@@ -107,15 +116,18 @@
             <field name="fail_reason" modifiers="{'invisible': [('state','!=','failed')]}"/>
             <field name="rating"/>
           </group>
+
+          <!-- NOTE:
+               We deliberately do not embed stock move / move-line tables here to avoid
+               model field mismatches. Open the picking with the smart button above. -->
         </sheet>
 
-        <!-- Odoo 17 chatter -->
         <chatter/>
       </form>
     </field>
   </record>
 
-  <!-- ===================== Action ===================== -->
+  <!-- Action -->
   <record id="action_trakka_dispatch_orders" model="ir.actions.act_window">
     <field name="name">Dispatch Orders</field>
     <field name="res_model">trakka.dispatch.order</field>
