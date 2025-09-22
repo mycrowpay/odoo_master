@@ -1,4 +1,5 @@
 <odoo>
+  <!-- Action + Menu -->
   <record id="action_trakka_escrow" model="ir.actions.act_window">
     <field name="name">Escrows</field>
     <field name="res_model">trakka.payguard.escrow</field>
@@ -6,11 +7,12 @@
   </record>
   <menuitem id="menu_trakka_escrow" parent="menu_trakka_finops_root" action="action_trakka_escrow" sequence="10"/>
 
+  <!-- Tree -->
   <record id="view_trakka_escrow_tree" model="ir.ui.view">
     <field name="name">trakka.payguard.escrow.tree</field>
     <field name="model">trakka.payguard.escrow</field>
     <field name="arch" type="xml">
-      <tree>
+      <tree string="Escrows">
         <field name="name"/>
         <field name="sale_order_id"/>
         <field name="partner_id"/>
@@ -20,25 +22,49 @@
     </field>
   </record>
 
+  <!-- Form (includes smart buttons) -->
   <record id="view_trakka_escrow_form" model="ir.ui.view">
     <field name="name">trakka.payguard.escrow.form</field>
     <field name="model">trakka.payguard.escrow</field>
     <field name="arch" type="xml">
-      <form>
+      <form string="Escrow">
         <header>
-            <button name="action_set_release_ready"
-          type="object"
-          string="Mark Release Ready"
-          modifiers="{'invisible': [('state','!=','held')]}"/>
+          <button name="action_set_release_ready"
+                  type="object"
+                  string="Mark Release Ready"
+                  modifiers="{'invisible': [('state','!=','held')]}"/>
 
-  <button name="action_post_settlement_move"
-          type="object"
-          string="Post Settlement"
-          class="oe_highlight"
-          modifiers="{'invisible': [('state','!=','released_ready')]}"/>
+          <button name="action_post_settlement_move"
+                  type="object"
+                  string="Post Settlement"
+                  class="oe_highlight"
+                  modifiers="{'invisible': [('state','!=','released_ready')]}"/>
+
           <field name="state" widget="statusbar" statusbar_visible="held,released_ready,released"/>
         </header>
+
         <sheet>
+          <!-- Smart buttons -->
+          <div class="oe_button_box" name="button_box">
+            <!-- Sales Order -->
+            <button name="action_view_sale_order"
+                    type="object"
+                    class="oe_stat_button"
+                    icon="fa-shopping-cart"
+                    modifiers="{'invisible': [('sale_order_count', '=', 0)]}">
+              <field name="sale_order_count" widget="statinfo" string="Sales Order"/>
+            </button>
+
+            <!-- Dispatches -->
+            <button name="action_view_dispatches"
+                    type="object"
+                    class="oe_stat_button"
+                    icon="fa-motorcycle"
+                    modifiers="{'invisible': [('has_sale_order', '=', False)]}">
+              <field name="dispatch_count" widget="statinfo" string="Dispatch"/>
+            </button>
+          </div>
+
           <div class="oe_title">
             <h1><field name="name"/></h1>
             <p class="text-muted">
@@ -46,15 +72,26 @@
               Customer <b>phone or mobile</b> is required to post settlement.
             </p>
           </div>
+
           <group>
-            <field name="sale_order_id"/>
-            <field name="partner_id" readonly="1"/>
-            <field name="company_id" readonly="1"/>
-            <field name="currency_id" readonly="1"/>
-            <field name="amount"/>
-            <field name="account_move_id" readonly="1"/>
-            <field name="wallet_move_id" readonly="1"/>
+            <group>
+              <field name="sale_order_id"/>
+              <field name="partner_id" readonly="1"/>
+              <field name="company_id" readonly="1"/>
+              <field name="currency_id" readonly="1"/>
+              <field name="amount"/>
+            </group>
+            <group string="Accounting / Wallet">
+              <field name="account_move_id" readonly="1"/>
+              <field name="wallet_move_id" readonly="1"/>
+            </group>
           </group>
+
+          <group string="Dispatch (latest)">
+            <field name="latest_dispatch_id" readonly="1" options="{'no_create': True}"/>
+            <field name="latest_dispatch_state" readonly="1"/>
+          </group>
+
           <chatter/>
         </sheet>
       </form>

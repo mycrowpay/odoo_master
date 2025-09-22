@@ -1,6 +1,6 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
-from odoo.exceptions import ValidationError
+from odoo.exceptions import ValidationError, UserError
 
 
 class TrakkaPayguardEscrow(models.Model):
@@ -66,6 +66,37 @@ class TrakkaPayguardEscrow(models.Model):
     account_move_id = fields.Many2one("account.move", readonly=True, copy=False)
     wallet_move_id = fields.Many2one("trakka.wallet.move", readonly=True, copy=False)
 
+    # ======== Smart-button helpers (computed, not stored) ========
+    sale_order_count = fields.Integer(
+        compute="_compute_links_counts", string="Sale Order(s)"
+    )
+    dispatch_count = fields.Integer(
+        compute="_compute_links_counts", string="Dispatch(es)"
+    )
+    has_sale_order = fields.Boolean(compute="_compute_links_counts")
+    has_dispatch = fields.Boolean(compute="_compute_links_counts")
+
+    latest_dispatch_id = fields.Many2one(
+        "trakka.dispatch.order",
+        compute="_compute_latest_dispatch_info",
+        string="Latest Dispatch",
+        readonly=True,
+    )
+    latest_dispatch_state = fields.Selection(
+        [
+            ("new", "New"),
+            ("assigned", "Assigned"),
+            ("accepted", "Accepted"),
+            ("picked", "Picked"),
+            ("on_route", "On Route"),
+            ("delivered", "Delivered"),
+            ("failed", "Failed"),
+        ],
+        compute="_compute_latest_dispatch_info",
+        string="Dispatch Status",
+        readonly=True,
+    )
+
     _sql_constraints = [
         # One escrow per SO (across the DB); SO is already company-scoped
         ("uniq_escrow_so", "unique(sale_order_id)", "An escrow already exists for this Sales Order."),
@@ -127,6 +158,39 @@ class TrakkaPayguardEscrow(models.Model):
         if self.sale_order_id:
             self.company_id = self.sale_order_id.company_id
             self.amount = self.sale_order_id.amount_total or 0.0
+
+    # -----------------------
+    # Smart-button computes
+    # -----------------------
+    @api.depends("sale_order_id")
+    def _compute_links_counts(self):
+        Dispatch = self.env["trakka.dispatch.order"].sudo()
+        for rec in self:
+            so = rec.sale_order_id
+            if so:
+                rec.sale_order_count = 1
+                rec.has_sale_order = True
+                rec.dispatch_count = Dispatch.search_count([("sale_order_id", "=", so.id)])
+                rec.has_dispatch = rec.dispatch_count > 0
+            else:
+                rec.sale_order_count = 0
+                rec.has_sale_order = False
+                rec.dispatch_count = 0
+                rec.has_dispatch = False
+
+    @api.depends("sale_order_id")
+    def _compute_latest_dispatch_info(self):
+        Dispatch = self.env["trakka.dispatch.order"].sudo()
+        for rec in self:
+            rec.latest_dispatch_id = False
+            rec.latest_dispatch_state = False
+            if rec.sale_order_id:
+                last = Dispatch.search(
+                    [("sale_order_id", "=", rec.sale_order_id.id)],
+                    order="id desc", limit=1
+                )
+                rec.latest_dispatch_id = last.id if last else False
+                rec.latest_dispatch_state = last.state if last else False
 
     # -----------------------
     # State transitions
@@ -229,3 +293,44 @@ class TrakkaPayguardEscrow(models.Model):
         })
         self.message_post(body=_("Settlement posted. JE %s; Wallet credited.") % (move.name or move.id))
         return True
+
+    # -----------------------
+    # Smart-button actions
+    # -----------------------
+    def action_view_sale_order(self):
+        """Open the linked Sale Order."""
+        self.ensure_one()
+        if not self.sale_order_id:
+            raise UserError(_("No Sales Order is linked to this Escrow."))
+        return {
+            "type": "ir.actions.act_window",
+            "name": _("Sales Order"),
+            "res_model": "sale.order",
+            "view_mode": "form,tree",
+            "target": "current",
+            "res_id": self.sale_order_id.id,
+            "domain": [("id", "=", self.sale_order_id.id)],
+            "context": {},
+        }
+
+    def action_view_dispatches(self):
+        """Open Dispatch Orders for this escrow's SO (single → form; multiple → list)."""
+        self.ensure_one()
+        if not self.sale_order_id:
+            raise UserError(_("Link a Sales Order first to see its dispatches."))
+        Dispatch = self.env["trakka.dispatch.order"].sudo()
+        domain = [("sale_order_id", "=", self.sale_order_id.id)]
+        dispatches = Dispatch.search(domain)
+        action = {
+            "type": "ir.actions.act_window",
+            "name": _("Dispatch Orders"),
+            "res_model": "trakka.dispatch.order",
+            "view_mode": "tree,form",
+            "target": "current",
+            "domain": domain,
+            "context": {"default_sale_order_id": self.sale_order_id.id},
+        }
+        if len(dispatches) == 1:
+            action["res_id"] = dispatches.id
+            action["view_mode"] = "form,tree"
+        return action
