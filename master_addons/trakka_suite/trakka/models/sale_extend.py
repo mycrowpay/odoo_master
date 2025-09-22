@@ -7,6 +7,13 @@ from odoo.exceptions import ValidationError, UserError
 class SaleOrder(models.Model):
     _inherit = "sale.order"
 
+
+     # Company toggle (readable on the SO for quick checks/UI)
+    trakka_require_invoice_before_settlement = fields.Boolean(
+        related="company_id.trakka_require_invoice_before_settlement",
+        store=False, readonly=True
+    )
+
     # ===== Counters used by smart buttons =====
     trakka_escrow_count = fields.Integer(compute="_compute_trakka_counts", store=False)
     trakka_dispatch_count = fields.Integer(compute="_compute_trakka_counts", store=False)
@@ -18,6 +25,9 @@ class SaleOrder(models.Model):
         compute="_compute_trakka_escrow_flags",
         store=False,
     )
+
+
+    
 
     # ----------------------------
     # Aggregates (smart button counters)
@@ -194,6 +204,36 @@ class SaleOrder(models.Model):
         action["domain"] = dom
 
         return action
+
+
+     # ---------- Invoicing for delivered qty ----------
+    def _trakka_invoice_delivered_qty(self, dispatch):
+       """
+       Create & post customer invoice(s) for delivered quantities.
+       - Expects the linked picking to be 'done' so delivered qty is accurate.
+       - Uses standard sale._create_invoices() which respects invoice policy 'delivery'.
+       Returns the posted invoice recordset (can be empty if nothing invoiceable).
+       """
+       self.ensure_one()
+       if not dispatch or not dispatch.picking_id:
+           raise ValidationError(_("No delivery picking linked to this dispatch."))
+       if dispatch.picking_id.state != "done":
+           raise ValidationError(_("Picking must be 'Done' before invoicing delivered quantities."))
+
+       # Quick sanity: anything to invoice?
+       has_delivered = any(l.qty_delivered > 0 for l in self.order_line)
+       if not has_delivered:
+           # Nothing delivered (should not happen if picking is done, but safe guard)
+           return self.env["account.move"]
+
+       # Create draft invoices from SO (delivery-based policy will pick delivered qty)
+       invoices = self._create_invoices(final=True)
+       if not invoices:
+           return invoices
+
+       # Post them
+       invoices.action_post()
+       return invoices
 
     # IMPORTANT: do NOT auto-create dispatches on confirm here.
     # Inventory creates stock.pickings; dispatches are keyed off each outgoing picking.

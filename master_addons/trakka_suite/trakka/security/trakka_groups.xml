@@ -1,15 +1,43 @@
 <odoo>
+  <!-- Define a custom module category that all Trakka groups can live under -->
+  <record id="module_category_trakka" model="ir.module.category">
+    <field name="name">Trakka</field>
+    <field name="description">Security groups for the Trakka suite</field>
+    <field name="sequence">50</field>
+  </record>
+
+  <!-- Trakka / FinOps User -->
   <record id="group_trakka_finops_user" model="res.groups">
     <field name="name">Trakka / FinOps User</field>
+    <field name="category_id" ref="module_category_trakka"/>
   </record>
+
+  <!-- Trakka / FinOps Manager (implies FinOps User) -->
   <record id="group_trakka_finops_manager" model="res.groups">
     <field name="name">Trakka / FinOps Manager</field>
+    <field name="category_id" ref="module_category_trakka"/>
     <field name="implied_ids" eval="[(4, ref('group_trakka_finops_user'))]"/>
   </record>
+
+  <!-- Trakka / Ops -->
   <record id="group_trakka_ops" model="res.groups">
     <field name="name">Trakka / Ops</field>
+    <field name="category_id" ref="module_category_trakka"/>
   </record>
+
+  <!-- Trakka / Rider -->
   <record id="group_trakka_rider" model="res.groups">
     <field name="name">Trakka / Rider</field>
+    <field name="category_id" ref="module_category_trakka"/>
+  </record>
+
+  <!-- (Optional) Generic FinOps Manager group, kept for views that reference it -->
+  <record id="group_finops_manager" model="res.groups">
+    <field name="name">FinOps Manager</field>
+    <field name="category_id" ref="module_category_trakka"/>
+    <!-- If you want this generic group to also grant Accounting Manager rights, uncomment: -->
+    <!-- <field name="implied_ids" eval="[(4, ref('account.group_account_manager'))]"/> -->
+    <!-- If you want this generic group to imply the Trakka FinOps Manager, uncomment: -->
+    <!-- <field name="implied_ids" eval="[(4, ref('group_trakka_finops_manager'))]"/> -->
   </record>
 </odoo>

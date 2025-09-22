@@ -5,3 +5,6 @@ from . import delivery_pricing_rule
 from . import dispatch_order
 from . import rider
 from . import sale_extend
+from . import res_company
+from . import res_config_settings
+from . import settings

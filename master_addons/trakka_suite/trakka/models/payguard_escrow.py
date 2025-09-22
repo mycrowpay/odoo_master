@@ -247,6 +247,13 @@ class TrakkaPayguardEscrow(models.Model):
 
         if self.state == "released":
             return True
+        
+        # Enforce company toggle: must be fully invoiced first
+        if self.company_id.trakka_require_invoice_before_settlement:
+            if self.sale_order_id.invoice_status != "invoiced":
+                raise ValidationError(
+                    _("This escrow cannot be settled until the Sales Order is fully invoiced.")
+                )
 
         if self.state != "released_ready":
             raise ValidationError(_("Escrow must be Release Ready before settlement."))

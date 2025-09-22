@@ -283,19 +283,50 @@ class TrakkaDispatchOrder(models.Model):
     def action_deliver(self):
         self._ensure_states({"on_route"})
         for rec in self:
+            # ------ Guards on proof ------
             if rec.proof_type == "otp" and not rec.proof_value:
                 raise ValidationError(_("Enter the OTP in 'Proof Value' before delivering."))
+
+        # ------ Guards on picking / serials ------
+        picking = rec.picking_id
+        if not picking:
+            raise ValidationError(_("No delivery picking is linked to this dispatch."))
+        if picking.state != "done":
+            raise ValidationError(_("The linked picking must be validated (Done) before marking delivered."))
+
+        # Tracked products must carry a lot/serial on the done moves
+        for ml in picking.move_line_ids:
+            if ml.product_id.tracking != "none" and not ml.lot_id:
+                raise ValidationError(
+                    _("Tracked product %(prod)s requires a lot/serial before delivery.")
+                    % {"prod": ml.product_id.display_name}
+                )
+
+        # ------ Auto-invoice delivered qty ------
+        invoices = rec.sale_order_id._trakka_invoice_delivered_qty(rec)
+        # If your company requires invoice before settlement, ensure we've got posted invoices now
+        if rec.company_id.trakka_require_invoice_before_settlement:
+            if rec.sale_order_id.invoice_status != "invoiced":
+                # Be explicit; this prevents escrow from moving forward if something failed above
+                raise ValidationError(
+                    _("Unable to confirm delivery → billing not complete yet. "
+                        "Please ensure an invoice has been posted for delivered quantities.")
+                )
+
+            # Set delivery state & timestamp
             rec.state = "delivered"
             rec.delivered_at = fields.Datetime.now()
             rec.message_post(body=_("Delivered successfully."))
-            rec._try_validate_picking()
 
-            escrow = rec.escrow_id
+            # ------ Nudge escrow policy (auto-on-delivery / cooldown flows) ------
+            Escrow = self.env["trakka.payguard.escrow"].sudo()
+            escrow = Escrow.search([("sale_order_id", "=", rec.sale_order_id.id)], limit=1)
             if escrow and escrow.state == "held" and escrow.release_policy in ("auto_on_delivery", "auto_after_cooldown"):
                 try:
                     escrow.action_set_release_ready()
                 except Exception as e:
                     escrow.message_post(body=_("Auto move to Release Ready failed on delivery: %s") % e)
+
 
     def action_fail(self):
         self._ensure_states({"new", "assigned", "accepted", "picked", "on_route"})

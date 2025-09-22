@@ -1,0 +1,64 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<odoo>
+
+  <!-- General Settings: extend base form -->
+  <record id="res_config_settings_view_form_inherit_trakka" model="ir.ui.view">
+    <field name="name">res.config.settings.view.form.inherit.trakka</field>
+    <field name="model">res.config.settings</field>
+    <field name="inherit_id" ref="base.res_config_settings_view_form"/>
+    <field name="arch" type="xml">
+
+      <!-- Inject our block directly under the form (Odoo 17 safe) -->
+      <xpath expr="//form" position="inside">
+        <div class="app_settings_block" data-string="Trakka" string="Trakka" data-key="trakka">
+          <h2>Trakka</h2>
+
+          <div class="row mt16 o_settings_container">
+
+            <!-- Require invoice before escrow settlement -->
+            <div class="col-12 col-lg-6 o_setting_box">
+              <div class="o_setting_left_pane">
+                <field name="trakka_require_invoice_before_settlement"/>
+              </div>
+              <div class="o_setting_right_pane">
+                <label for="trakka_require_invoice_before_settlement"/>
+                <div class="text-muted">
+                  If enabled, the dispatch cannot mark Delivered unless an invoice exists
+                  (and you may extend to require Posted state).
+                </div>
+              </div>
+            </div>
+
+            <!-- Default escrow release policy -->
+            <div class="col-12 col-lg-6 o_setting_box">
+              <div class="o_setting_left_pane">
+                <field name="trakka_escrow_default_policy"/>
+              </div>
+              <div class="o_setting_right_pane">
+                <label for="trakka_escrow_default_policy"/>
+                <div class="text-muted">
+                  New escrows will default to this policy (Auto on Delivery / Auto after Cooldown / Manual).
+                </div>
+              </div>
+            </div>
+
+            <!-- Cooldown days -->
+            <div class="col-12 col-lg-6 o_setting_box">
+              <div class="o_setting_left_pane">
+                <field name="trakka_escrow_release_cooldown_days"/>
+              </div>
+              <div class="o_setting_right_pane">
+                <label for="trakka_escrow_release_cooldown_days"/>
+                <div class="text-muted">
+                  Waiting period before auto settlement when policy is "Auto after Cooldown" (0 for immediate).
+                </div>
+              </div>
+            </div>
+
+          </div>
+        </div>
+      </xpath>
+    </field>
+  </record>
+
+</odoo>

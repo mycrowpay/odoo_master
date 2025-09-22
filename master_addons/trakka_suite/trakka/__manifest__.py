@@ -26,6 +26,7 @@
         "views/dispatch_views.xml",
         "views/rider_views.xml",
         "views/sale_extend_views.xml",
+        'views/settings.xml', 
 
     ],
     "application": True,
