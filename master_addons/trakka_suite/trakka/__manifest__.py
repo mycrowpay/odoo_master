@@ -27,6 +27,7 @@
         "views/rider_views.xml",
         "views/sale_extend_views.xml",
         'views/settings.xml', 
+        "views/delivery_connector_views.xml"
 
     ],
     "application": True,

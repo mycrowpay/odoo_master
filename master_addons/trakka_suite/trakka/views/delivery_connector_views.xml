@@ -107,7 +107,7 @@
 
   <!-- Menu -->
   <menuitem id="menu_trakka_delivery_connector"
-            parent="menu_trakka_logi_root"
+            parent="menu_trakka_root"
             action="action_trakka_delivery_connector"
             sequence="80"/>
 
