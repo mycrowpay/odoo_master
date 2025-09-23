@@ -8,3 +8,5 @@ from . import sale_extend
 from . import res_company
 from . import res_config_settings
 from . import settings
+from . import delivery_connector
+from . import delivery_impl_dummy 

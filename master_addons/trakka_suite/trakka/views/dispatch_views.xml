@@ -30,6 +30,7 @@
         <field name="provider_type"/>
         <field name="state"/>
         <field name="company_id"/>
+
         <filter string="New"        name="state_new"       domain="[('state','=','new')]"/>
         <filter string="Assigned"   name="state_assigned"  domain="[('state','=','assigned')]"/>
         <filter string="Accepted"   name="state_accepted"  domain="[('state','=','accepted')]"/>
@@ -37,6 +38,7 @@
         <filter string="On Route"   name="state_onroute"   domain="[('state','=','on_route')]"/>
         <filter string="Delivered"  name="state_delivered" domain="[('state','=','delivered')]"/>
         <filter string="Failed"     name="state_failed"    domain="[('state','=','failed')]"/>
+
         <group expand="0" string="Group By">
           <filter string="State"         name="grp_state"     context="{'group_by':'state'}"/>
           <filter string="Provider Type" name="grp_provider"  context="{'group_by':'provider_type'}"/>
@@ -54,6 +56,7 @@
     <field name="arch" type="xml">
       <form string="Dispatch Order">
         <header>
+          <!-- lifecycle -->
           <button name="action_assign"   type="object" string="Assign"
                   modifiers="{'invisible': [('state','!=','new')]}"/>
           <button name="action_accept"   type="object" string="Accept"
@@ -67,23 +70,41 @@
           <button name="action_fail"     type="object" string="Fail"
                   modifiers="{'invisible': [('state','in',['delivered','failed'])]}"/>
 
-          <!-- Attachments stat button (mail.thread) -->
+          <!-- connector controls -->
+          <button name="action_send_to_provider"
+                  type="object"
+                  string="Send to Provider"
+                  class="btn-secondary"
+                  modifiers="{'invisible': ['|', ('connector_id','=',False), ('provider_ref','!=',False)]}"/>
+
+          <button name="action_refresh_provider_status"
+                  type="object"
+                  string="Refresh Status"
+                  modifiers="{'invisible': [('provider_ref','=',False)]}"/>
+
+          <!-- attachments (mail.thread) -->
           <button name="action_open_attachments" type="object" class="oe_stat_button" icon="fa-paperclip">
             <field name="message_attachment_count" widget="statinfo" string="Files"/>
           </button>
 
-          <field name="state" widget="statusbar"/>
+          <field name="state" widget="statusbar"
+                 statusbar_visible="new,assigned,accepted,picked,on_route,delivered,failed"/>
         </header>
 
         <sheet>
           <!-- Smart buttons -->
           <div class="oe_button_box" name="button_box">
-            <!-- Stock Picking (created/linked by Python hooks). Hidden if none. -->
+            <!-- Open picking (if any) -->
             <button name="action_open_picking" type="object" class="oe_stat_button" icon="fa-truck"
                     modifiers="{'invisible': [('picking_id','=',False)]}">
               <field name="picking_id" invisible="1"/>
-              <field name="name" widget="statinfo" string="Delivery"/>
+              <span class="o_stat_text">Delivery</span>
             </button>
+          </div>
+
+          <div class="oe_title">
+            <h1><field name="name"/></h1>
+            <p class="text-muted">Dispatch linked to a Sales Order; states mirror delivery progress.</p>
           </div>
 
           <group>
@@ -117,12 +138,23 @@
             <field name="rating"/>
           </group>
 
-          <!-- NOTE:
-               We deliberately do not embed stock move / move-line tables here to avoid
-               model field mismatches. Open the picking with the smart button above. -->
-        </sheet>
+          <group string="Provider">
+            <field name="connector_id"
+              options="{'no_create_edit': True}"
+              context="{
+                'res_model': 'trakka.delivery.connector',
+                'default_res_model': 'trakka.delivery.connector',
+                'default_model': 'trakka.delivery.connector'
+              }"/>
 
-        <chatter/>
+            <field name="provider_ref" readonly="1" modifiers="{'invisible': [('provider_ref','=',False)]}"/>
+            <field name="provider_status_json" widget="text" readonly="1"
+                   modifiers="{'invisible': [('provider_status_json','=',False)]}"/>
+          </group>
+
+          <!-- Stock moves are viewed from the Delivery smart button -->
+          <chatter/>
+        </sheet>
       </form>
     </field>
   </record>

@@ -1,7 +1,7 @@
 # -*- coding: utf-8 -*-
 from odoo import api, fields, models, _
 from odoo.exceptions import UserError, ValidationError
-
+import json
 
 class TrakkaDispatchOrder(models.Model):
     _name = "trakka.dispatch.order"
@@ -46,6 +46,26 @@ class TrakkaDispatchOrder(models.Model):
         index=True,
         tracking=True,
     )
+
+        # 3PL connector integration
+    connector_id = fields.Many2one(
+        "trakka.delivery.connector",
+        string="Connector",
+        help="External delivery provider integration to use for this dispatch.",
+    )
+    provider_ref = fields.Char(
+        string="Provider Reference",
+        readonly=True,
+        copy=False,
+        help="Reference/ID returned by the external provider when the shipment is created.",
+    )
+    provider_status_json = fields.Text(
+        string="Provider Status (JSON)",
+        readonly=True,
+        copy=False,
+        help="Raw status payload from the provider.",
+    )
+
 
     # Escrow helper (computed)
     escrow_id = fields.Many2one(
@@ -375,3 +395,126 @@ class TrakkaDispatchOrder(models.Model):
             },
             "target": "current",
         }
+    
+        # --- 3PL connector linkage ---
+    connector_id = fields.Many2one(
+        "trakka.delivery.connector",
+        string="Delivery Connector",
+        help="Optional 3PL / Rider-app connector to send this dispatch to.",
+        tracking=True,
+    )
+    provider_ref = fields.Char(
+        string="Provider Reference",
+        readonly=True,
+        copy=False,
+        help="External reference returned by the provider."
+    )
+    provider_status_json = fields.Json(string="Provider Status (raw)", readonly=True)
+
+
+    def action_send_to_provider(self):
+        """Create shipment on the chosen connector and store provider_ref."""
+        for rec in self:
+            if not rec.connector_id:
+                raise ValidationError(_("Please select a Delivery Connector first."))
+            if rec.provider_ref:
+                raise ValidationError(_("This dispatch is already sent to a provider (%s).") % rec.provider_ref)
+            if rec.state not in ("new", "assigned", "accepted"):
+                raise ValidationError(_("You can only send a dispatch while it's New/Assigned/Accepted."))
+
+            payload = rec.connector_id.create_shipment(rec)
+            if not isinstance(payload, dict) or not payload.get("provider_ref"):
+                raise UserError(_("Connector did not return a provider_ref."))
+            rec.provider_ref = payload["provider_ref"]
+            if payload.get("raw"):
+                rec.provider_status_json = payload["raw"]
+            rec.message_post(body=_("Sent to provider %s → %s") % (rec.connector_id.code, rec.provider_ref))
+        return True
+
+    def action_refresh_status(self):
+        """Call connector.track and map state/events into the dispatch."""
+        for rec in self:
+            if not rec.connector_id or not rec.provider_ref:
+                raise ValidationError(_("No connector/provider_ref to refresh."))
+            tracking = rec.connector_id.track(rec.provider_ref)
+            rec.connector_id._apply_provider_status_to_dispatch(rec, tracking)
+        return True
+    
+
+
+        # ----------------------------
+    # 3PL: outbound calls
+    # ----------------------------
+    def action_send_to_provider(self):
+        """Create shipment on the selected connector and store provider_ref."""
+        for rec in self:
+            if not rec.connector_id:
+                raise ValidationError(_("Select a Connector before sending to provider."))
+            if rec.provider_ref:
+                raise ValidationError(_("This dispatch is already registered with the provider (ref: %s).") % rec.provider_ref)
+
+            # Calls the abstract connector; real connectors override create_shipment
+            provider_ref = rec.connector_id.create_shipment(rec)
+            if not provider_ref:
+                raise UserError(_("Connector did not return a provider reference."))
+
+            rec.write({"provider_ref": provider_ref})
+            rec.message_post(body=_("Sent to provider. Reference: %s") % provider_ref)
+
+    def action_refresh_provider_status(self):
+        """Poll provider for latest status; store payload & optionally sync state."""
+        for rec in self:
+            if not rec.connector_id:
+                raise ValidationError(_("No Connector configured on this dispatch."))
+            if not rec.provider_ref:
+                raise ValidationError(_("No provider reference yet. Send to provider first."))
+
+            payload = rec.connector_id.track(rec.provider_ref) or {}
+            # Save raw payload
+            try:
+                rec.provider_status_json = json.dumps(payload, ensure_ascii=False, indent=2)
+            except Exception:
+                # fall back to string
+                rec.provider_status_json = str(payload)
+
+            # Optional: map external status to our state
+            new_state = rec._map_provider_status_to_state(payload)
+            if new_state and new_state != rec.state:
+                # allow only forward moves
+                allowed = {
+                    "new": {"assigned"},
+                    "assigned": {"accepted", "picked", "failed"},
+                    "accepted": {"picked", "failed"},
+                    "picked": {"on_route", "failed"},
+                    "on_route": {"delivered", "failed"},
+                    "delivered": set(),
+                    "failed": set(),
+                }
+                if rec.state in allowed and new_state in allowed[rec.state]:
+                    getattr(rec, f"action_{'on_route' if new_state=='on_route' else new_state}")()
+                else:
+                    rec.message_post(body=_("Provider suggests state '%s' but transition was ignored.") % new_state)
+
+            rec.message_post(body=_("Provider status refreshed."))
+
+    # ----------------------------
+    # 3PL: status mapping helper
+    # ----------------------------
+    def _map_provider_status_to_state(self, payload):
+        """Translate provider payload to one of our states."""
+        status = (payload.get("status") or payload.get("state") or "").lower()
+        mapping = {
+            "created": "assigned",
+            "assigned": "assigned",
+            "accepted": "accepted",
+            "picked": "picked",
+            "in_transit": "on_route",
+            "on_route": "on_route",
+            "delivered": "delivered",
+            "failed": "failed",
+            "canceled": "failed",
+        }
+        return mapping.get(status)
+
+
+

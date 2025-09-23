@@ -10,3 +10,5 @@ trakka_acc_dispatch_ops,Dispatch Ops,model_trakka_dispatch_order,trakka.group_tr
 trakka_acc_dispatch_rider,Dispatch Rider,model_trakka_dispatch_order,trakka.group_trakka_rider,1,1,0,0
 trakka_acc_pricing_ops,Pricing Ops,model_trakka_delivery_pricing_rule,trakka.group_trakka_ops,1,1,1,1
 trakka_acc_rider_ops,Rider Ops,model_trakka_rider,trakka.group_trakka_ops,1,1,1,1
+trakka_acc_delivery_connector_user,Delivery Connector User,model_trakka_delivery_connector,base.group_user,1,0,0,0
+trakka_acc_delivery_connector_manager,Delivery Connector Manager,model_trakka_delivery_connector,trakka.group_trakka_finops_manager,1,1,1,1

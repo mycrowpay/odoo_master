@@ -1,4 +1,6 @@
+<!-- trakka/data/cron.xml -->
 <odoo>
+  <!-- Existing: auto-settle escrows -->
   <record id="ir_cron_trakka_auto_settle_escrows" model="ir.cron">
     <field name="name">Trakka: Auto-Settle Release Ready Escrows</field>
     <field name="model_id" ref="model_trakka_payguard_escrow"/>
@@ -7,6 +9,19 @@
     <field name="interval_number">1</field>
     <field name="interval_type">hours</field>
     <field name="numbercall">-1</field>
+    <field name="active">True</field>
+  </record>
+
+  <!-- NEW: poll 3PL connectors for status -->
+  <record id="ir_cron_trakka_3pl_poll" model="ir.cron">
+    <field name="name">Trakka: 3PL Status Poll</field>
+    <field name="model_id" ref="model_trakka_delivery_connector"/>
+    <field name="state">code</field>
+    <field name="code">model.cron_poll_status()</field>
+    <field name="interval_number">10</field>
+    <field name="interval_type">minutes</field>
+    <field name="numbercall">-1</field>
+    <field name="doall">False</field>
     <field name="active">True</field>
   </record>
 </odoo>
