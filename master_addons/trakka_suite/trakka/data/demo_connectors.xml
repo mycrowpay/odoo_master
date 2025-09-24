@@ -1,0 +1,12 @@
+<odoo>
+  <record id="demo_connector_shadowship" model="trakka.delivery.connector">
+    <field name="name">ShadowShip (Demo)</field>
+    <!-- Will succeed only if the model above is registered -->
+    <field name="implementation_model_id"
+           model="ir.model"
+           search="[('model', '=', 'trakka.delivery.impl.dummy')]"/>
+    <field name="api_key">demo-key</field>
+    <field name="webhook_secret">demo-secret</field>
+    <field name="active">True</field>
+  </record>
+</odoo>

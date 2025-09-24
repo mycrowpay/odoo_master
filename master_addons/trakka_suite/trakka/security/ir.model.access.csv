@@ -12,3 +12,5 @@ trakka_acc_pricing_ops,Pricing Ops,model_trakka_delivery_pricing_rule,trakka.gro
 trakka_acc_rider_ops,Rider Ops,model_trakka_rider,trakka.group_trakka_ops,1,1,1,1
 trakka_acc_delivery_connector_user,Delivery Connector User,model_trakka_delivery_connector,base.group_user,1,0,0,0
 trakka_acc_delivery_connector_manager,Delivery Connector Manager,model_trakka_delivery_connector,trakka.group_trakka_finops_manager,1,1,1,1
+access_trakka_connector_job_user,trakka.connector.job user,model_trakka_connector_job,base.group_user,1,0,0,0
+access_trakka_connector_job_admin,trakka.connector.job admin,model_trakka_connector_job,base.group_system,1,1,1,1

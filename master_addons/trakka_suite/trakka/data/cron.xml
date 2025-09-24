@@ -24,4 +24,16 @@
     <field name="doall">False</field>
     <field name="active">True</field>
   </record>
+
+
+   <record id="ir_cron_trakka_3pl_retry" model="ir.cron">
+    <field name="name">Trakka: 3PL Retry Queue</field>
+    <field name="model_id" ref="model_trakka_connector_job"/>
+    <field name="state">code</field>
+    <field name="code">model.run()</field>
+    <field name="interval_number">5</field>
+    <field name="interval_type">minutes</field>
+    <field name="numbercall">-1</field>
+    <field name="active">True</field>
+  </record>
 </odoo>

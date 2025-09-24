@@ -13,10 +13,16 @@
         "security/trakka_groups.xml",
         "security/ir.model.access.csv",
         "security/trakka_rules.xml",
+
+
+
         # Data
         "data/sequences.xml",
         "data/accounts_journals.xml",
         "data/cron.xml",
+        "data/demo_connectors.xml",
+
+
         # Views (menus first, then each model)
         "views/menu.xml",
         "views/finops_escrow_views.xml",

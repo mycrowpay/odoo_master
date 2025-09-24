@@ -441,6 +441,40 @@ class TrakkaDispatchOrder(models.Model):
         return True
     
 
+        # inside trakka.dispatch.order class
+    def _apply_provider_status(self, payload):
+        """Update fields from provider payload; keep raw trail."""
+        for rec in self:
+            # append/replace raw json
+            raw = (rec.provider_status_json or "").strip()
+            if raw:
+                try:
+                    current = json.loads(raw)
+                except Exception:
+                    current = {}
+            else:
+                current = {}
+            # naive merge for demo
+            for k, v in (payload or {}).items():
+                current[k] = v
+            rec.provider_status_json = json.dumps(current, indent=2)
+
+            # map status → state if present
+            status = (payload or {}).get("status")
+            if status == "accepted" and rec.state == "assigned":
+                rec.state = "accepted"
+            elif status in ("in_transit", "picked") and rec.state in ("accepted", "assigned", "picked"):
+                rec.state = "picked"
+            elif status in ("out_for_delivery", "on_route") and rec.state in ("accepted", "picked", "on_route"):
+                rec.state = "on_route"
+            elif status == "delivered":
+                if rec.state not in ("delivered",):
+                    rec.state = "delivered"
+            elif status == "failed":
+                rec.state = "failed"
+
+    
+
 
         # ----------------------------
     # 3PL: outbound calls

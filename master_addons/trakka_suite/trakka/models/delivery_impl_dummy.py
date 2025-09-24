@@ -1,31 +1,19 @@
 # -*- coding: utf-8 -*-
-from odoo import models, _
+from odoo import models
 
-class TrakkaConnectorDummy(models.AbstractModel):
-    """
-    Minimal connector implementation so you can wire a connector record to it.
-    Replace with real 3PL adapters later (e.g., trakka.connector.gig, trakka.connector.sendy, etc.).
-    """
-    _name = "trakka.connector.dummy"
-    _description = "Dummy Delivery Connector (always succeeds)"
+class TrakkaDeliveryImplDummy(models.AbstractModel):
+    _name = "trakka.delivery.impl.dummy"
+    _description = "Dummy Delivery Connector Implementation"
 
-    # --- required API ---
+    # required API
     def quote(self, so=None, dispatch=None):
-        # return a flat 10.00 with "1 day" ETA
-        return {"amount": 10.0, "eta": "P1D"}
+        return {"amount": 100.0, "eta": "P2D"}
 
     def create_shipment(self, dispatch):
-        # pretend we created a shipment and return a provider reference
-        return f"DUMMY-{dispatch.id}"
+        return f"DEMOPROV-{dispatch.id}"
 
     def track(self, provider_ref):
-        # return a fake status payload
-        return {
-            "provider_ref": provider_ref,
-            "status": "in_transit",
-            "events": [{"ts": "now", "msg": "Dummy in transit"}],
-        }
+        return {"status": "in_transit", "events": [{"status": "picked"}]}
 
     def cancel(self, provider_ref):
-        # always allow cancel in dummy
         return True
