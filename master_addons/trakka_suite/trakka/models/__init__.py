@@ -11,3 +11,7 @@ from . import settings
 from . import delivery_connector
 from . import delivery_impl_dummy 
 from . import connector_job
+from . import mpesa_intent
+from . import product_extend
+from . import res_partner_extend
+from . import shopfront_fields 

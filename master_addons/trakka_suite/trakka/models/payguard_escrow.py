@@ -318,6 +318,11 @@ class TrakkaPayguardEscrow(models.Model):
         })
         self.message_post(body=_("Settlement posted. JE %s; Wallet credited.") % (move.name or move.id))
         return True
+    
+    fund_state = fields.Selection(
+    [("pending","Pending"),("funded","Funded"),("failed","Failed")],
+    default="pending", index=True, tracking=True
+)
 
     # -------------------------------------------------
     # Automated paths

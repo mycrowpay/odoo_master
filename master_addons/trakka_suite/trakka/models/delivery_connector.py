@@ -42,6 +42,24 @@ class TrakkaDeliveryConnector(models.Model):
     webhook_secret = fields.Char(groups="base.group_system")
     extra_config = fields.Text(help="JSON/YAML blob for provider-specific settings.")
 
+
+
+    def _apply_provider_status_to_dispatch(self, dispatch, payload):
+        try:
+            # store raw
+            try:
+                raw = json.dumps(payload or {}, ensure_ascii=False, indent=2)
+            except Exception:
+                raw = str(payload)
+            dispatch.provider_status_json = raw
+            # map status -> state
+            new_state = self._map_provider_status(payload or {})
+            if new_state and new_state != dispatch.state:
+                dispatch.state = new_state
+                dispatch.message_post(body=_("Provider status → %s") % new_state)
+        except Exception as e:
+            _logger.exception("apply status failed: %s", e)
+
     # -------------------------------------------------------------------------
     # Public API to be called by dispatch
     # -------------------------------------------------------------------------
@@ -88,26 +106,13 @@ class TrakkaDeliveryConnector(models.Model):
             connector = d.connector_id
             if not connector:
                 continue
-
             try:
                 payload = connector.track(d.provider_ref) or {}
+                connector._apply_provider_status_to_dispatch(d, payload)
             except Exception as e:
-                # Never let the cron crash — log and continue
                 _logger.exception("Polling failed for dispatch %s (ref=%s): %s", d.id, d.provider_ref, e)
                 self.env.cr.rollback()
                 continue
-
-            # Store raw payload for debugging (Text field => dump to JSON string)
-            try:
-                d.provider_status_json = json.dumps(payload, ensure_ascii=False)
-            except Exception:
-                # Fallback if payload isn't serializable
-                d.provider_status_json = str(payload)
-
-            # Map provider status to internal state
-            new_state = self._map_provider_status(payload)
-            if new_state and new_state != d.state:
-                d.state = new_state
 
         _logger.info("cron_poll_status: done")
 
@@ -130,6 +135,31 @@ class TrakkaDeliveryConnector(models.Model):
             # add more aliases as needed
         }
         return mapping.get(status)
+    
+    # -------------------------------------------------------------------------
+    # Helper: normalize + apply provider status to a dispatch (single source)
+    # -------------------------------------------------------------------------
+
+    def _apply_provider_status_to_dispatch(self, dispatch, payload):
+        """
+        Persist raw provider payload and move dispatch state based on _map_provider_status().
+        Safe to call from cron, manual refresh, or webhook paths.
+        """
+        self.ensure_one()
+        if not dispatch:
+            return
+        # Store raw payload (Text field) for audit/debug
+        try:
+            raw = json.dumps(payload or {}, ensure_ascii=False, indent=2)
+        except Exception:
+            raw = str(payload)
+        dispatch.provider_status_json = raw
+
+        # Map provider status → internal state
+        new_state = self._map_provider_status(payload or {})
+        if new_state and new_state != dispatch.state:
+            dispatch.state = new_state
+            dispatch.message_post(body=_("Provider status → %s") % new_state)
 
     # -------------------------------------------------------------------------
     # Internal helpers / guards

@@ -1,0 +1,20 @@
+<odoo>
+  <data noupdate="1">
+    <record id="param_trakka_mpesa_short_code" model="ir.config_parameter">
+      <field name="key">trakka.mpesa.short_code</field>
+      <field name="value">174379</field>
+    </record>
+    <record id="param_trakka_mpesa_passkey" model="ir.config_parameter">
+      <field name="key">trakka.mpesa.passkey</field>
+      <field name="value">YOUR_PASSKEY</field>
+    </record>
+    <record id="param_trakka_mpesa_env" model="ir.config_parameter">
+      <field name="key">trakka.mpesa.env</field>
+      <field name="value">sandbox</field>
+    </record>
+    <record id="param_trakka_mpesa_callback_base" model="ir.config_parameter">
+      <field name="key">trakka.mpesa.callback_base</field>
+      <field name="value">https://api.trakka.africa</field>
+    </record>
+  </data>
+</odoo>
