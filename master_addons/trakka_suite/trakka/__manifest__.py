@@ -7,7 +7,7 @@
     "author": "Your Company",
     "website": "https://trakka.africa",
     "license": "LGPL-3",
-    "depends": ["base", "mail", "sale", "account"],
+    "depends": ["base", "mail", "sale", "account", ],
     "data": [
         # Security
         "security/trakka_groups.xml",
@@ -21,6 +21,8 @@
         "data/accounts_journals.xml",
         "data/cron.xml",
         "data/demo_connectors.xml",
+        'data/ir_config_params.xml',
+        'views/res_config_settings_view.xml',
 
 
         # Views (menus first, then each model)

@@ -1,5 +1,6 @@
 # -*- coding: utf-8 -*-
 import re
+import uuid
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError
 
@@ -28,9 +29,12 @@ class ResPartner(models.Model):
     @api.constrains('shop_slug')
     def _check_shop_slug_format(self):
         for rec in self:
-            if rec.shop_slug and _SLUG_RE.sub('', rec.shop_slug) != rec.shop_slug.replace('-', ''):
-                # Only [a-z0-9-] allowed after our slugify; guard against manual bad edits
-                raise ValidationError(_("Shop slug can only contain lowercase letters, digits and hyphens."))
+            if rec.shop_slug:
+                # only [a-z0-9-] allowed
+                candidate = rec.shop_slug
+                cleaned = _SLUG_RE.sub('-', candidate).strip('-')
+                if cleaned != candidate or not cleaned:
+                    raise ValidationError(_("Shop slug can only contain lowercase letters, digits and hyphens."))
 
     @api.model_create_multi
     def create(self, vals_list):
@@ -38,28 +42,45 @@ class ResPartner(models.Model):
             # Only generate for companies (seller concept)
             is_company = vals.get('is_company') or (vals.get('company_type') == 'company')
             if is_company and not vals.get('shop_slug'):
-                base = _slugify(vals.get('name'))
+                base = _slugify(vals.get('name')) or str(uuid.uuid4())[:8]
                 vals['shop_slug'] = self._generate_unique_slug(base)
         records = super().create(vals_list)
         return records
 
     def write(self, vals):
-        # If someone clears the slug on a company, regenerate
+        # If user manually sets a slug, normalize & ensure uniqueness
+        if 'shop_slug' in vals and vals.get('shop_slug'):
+            base = _slugify(vals['shop_slug'])
+            if not base:
+                raise ValidationError(_("Invalid slug"))
+            vals = dict(vals)  # copy
+            # resolve uniqueness against all others (excluding each self)
+            for rec in self:
+                vals['shop_slug'] = rec._generate_unique_slug(base, exclude_id=rec.id)
+                super(ResPartner, rec).write(vals)
+            return True
+
         res = super().write(vals)
-        regen_needed = 'shop_slug' in vals and not vals.get('shop_slug')
-        if regen_needed:
+
+        # If slug got cleared explicitly on a company, regenerate
+        if 'shop_slug' in vals and not vals.get('shop_slug'):
             for rec in self:
                 if rec.is_company or rec.company_type == 'company':
-                    base = _slugify(rec.name)
+                    base = _slugify(rec.name) or str(uuid.uuid4())[:8]
                     rec.shop_slug = rec._generate_unique_slug(base)
         return res
 
-    def _generate_unique_slug(self, base):
+    def _generate_unique_slug(self, base, exclude_id=False):
         """Ensure uniqueness by suffixing -2, -3, ... if needed."""
         base = base or 'company'
         slug = base
         i = 2
-        while self.env['res.partner'].sudo().search_count([('shop_slug', '=', slug)]) > 0:
+        Partner = self.env['res.partner'].sudo()
+        while True:
+            domain = [('shop_slug', '=', slug)]
+            if exclude_id:
+                domain.append(('id', '!=', exclude_id))
+            if Partner.search_count(domain) == 0:
+                return slug
             slug = f"{base}-{i}"
             i += 1
-        return slug

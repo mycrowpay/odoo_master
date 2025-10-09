@@ -1,7 +1,11 @@
 # -*- coding: utf-8 -*-
+import json
+import logging
 from odoo import api, fields, models, _
 from odoo.exceptions import ValidationError
-import base64, hashlib, json, datetime
+from ..services.mpesa_daraja import daraja
+
+_logger = logging.getLogger(__name__)
 
 class TrakkaMpesaIntent(models.Model):
     _name = "trakka.mpesa.intent"
@@ -15,14 +19,18 @@ class TrakkaMpesaIntent(models.Model):
     amount = fields.Monetary(required=True, currency_field="currency_id")
     currency_id = fields.Many2one("res.currency", related="company_id.currency_id", store=True, readonly=True)
     phone = fields.Char(required=True)
-    psp_ref = fields.Char(index=True)            # CheckoutRequestID
-    idempotency_key = fields.Char(index=True)    # (so_id, amount, phone) hash
-    state = fields.Selection([("init","Init"),("pending","Pending"),("funded","Funded"),("failed","Failed")], default="init", index=True)
+    psp_ref = fields.Char(index=True)
+    idempotency_key = fields.Char(index=True)
+    state = fields.Selection([
+        ("init","Init"),("pending","Pending"),
+        ("funded","Funded"),("failed","Failed")
+    ], default="init", index=True)
     raw_last = fields.Text()
 
     @api.model
     def _make_idem(self, so_id, amount, phone):
         src = f"{so_id}:{amount}:{phone}"
+        import hashlib
         return hashlib.sha256(src.encode("utf-8")).hexdigest()
 
     @api.model
@@ -44,15 +52,45 @@ class TrakkaMpesaIntent(models.Model):
             "idempotency_key": idem,
         })
 
-    # Wire to Daraja here in real impl; stub returns a pseudo ref
     def action_stk_push(self):
+        """
+        Run STK push. Returns a dict:
+          { ok: bool, psp_ref: str|None, error: str|None, payload: dict }
+        Also updates record state/psp_ref/raw_last.
+        """
+        results = []
         for rec in self:
-            rec.state = "pending"
-            rec.psp_ref = rec.psp_ref or f"STK-{rec.id}"
-            rec.raw_last = json.dumps({"stub": True, "psp_ref": rec.psp_ref})
-        return True
+            dj = daraja(self.env)
+            # Dummy mode handled inside client; always returns ok=True
+            res = dj.stk_push(
+                amount=rec.amount,
+                msisdn=rec.phone,
+                psp_ref_hint=f"SO{rec.sale_order_id.id}"
+            )
+            # Save last payload for debug
+            try:
+                rec.raw_last = json.dumps(res.get("payload") or {}, ensure_ascii=False)
+            except Exception:
+                rec.raw_last = str(res.get("payload"))
 
-    # Called by webhook; idempotent
+            if res.get("ok"):
+                rec.state = "pending"
+                if res.get("psp_ref"):
+                    rec.psp_ref = res["psp_ref"]
+                elif not rec.psp_ref:
+                    rec.psp_ref = f"STK-{rec.id}"
+            else:
+                rec.state = "failed"
+                _logger.error("M-Pesa STK failed for intent %s: %s", rec.id, res.get("error"))
+
+            results.append({
+                "ok": bool(res.get("ok")),
+                "psp_ref": rec.psp_ref or None,
+                "error": res.get("error"),
+                "state": rec.state,
+            })
+        return results[0] if len(results) == 1 else results
+
     def mark_funded(self, psp_ref, raw_payload=None):
         rec = self.search([("psp_ref","=",psp_ref)], limit=1)
         if not rec:
@@ -65,7 +103,6 @@ class TrakkaMpesaIntent(models.Model):
         if rec.state == "funded":
             return True
         rec.state = "funded"
-        # Flip escrow → funded (add the field below in escrow model)
         esc = rec.escrow_id.sudo()
         if esc:
             esc.write({"fund_state": "funded"})

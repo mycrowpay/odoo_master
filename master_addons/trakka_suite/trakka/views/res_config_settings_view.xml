@@ -1,0 +1,95 @@
+<odoo>
+  <!-- Standalone Settings form for Trakka → M-Pesa (no inherit, no xpaths) -->
+  <record id="view_res_config_settings_trakka_mpesa" model="ir.ui.view">
+    <field name="name">res.config.settings.trakka.mpesa</field>
+    <field name="model">res.config.settings</field>
+    <field name="priority">50</field>
+    <field name="arch" type="xml">
+      <form string="Settings" groups="base.group_system">
+        <sheet>
+          <h1>
+            <span>Trakka — M-Pesa</span>
+          </h1>
+
+          <group string="Runtime Mode">
+            <field name="trakka_mpesa_mode"/>
+          </group>
+
+          <!-- FIX: escape ampersand -->
+          <group string="Environment &amp; Endpoints" colspan="2">
+            <group>
+              <field name="trakka_mpesa_env"/>
+              <label for="trakka_mpesa_base_url"/>
+              <div class="text-muted">
+                Optional explicit base URL (overrides environment default).<br/>
+                Sandbox: https://sandbox.safaricom.co.ke • Production: https://api.safaricom.co.ke
+              </div>
+              <field name="trakka_mpesa_base_url" placeholder="https://sandbox.safaricom.co.ke"/>
+            </group>
+            <group>
+              <label for="trakka_mpesa_callback_base"/>
+              <div class="text-muted">
+                Your public base URL — we append <code>/webhooks/mpesa</code>
+              </div>
+              <field name="trakka_mpesa_callback_base" placeholder="https://api.trakka.africa"/>
+            </group>
+          </group>
+
+          <group string="Credentials" colspan="2">
+            <group>
+              <field name="trakka_mpesa_consumer_key" placeholder="Consumer Key"/>
+              <field name="trakka_mpesa_consumer_secret" placeholder="Consumer Secret" password="True" widget="password"/>
+            </group>
+            <group>
+              <field name="trakka_mpesa_short_code" placeholder="Paybill/Till e.g. 174379"/>
+              <field name="trakka_mpesa_passkey" placeholder="LNM Passkey" password="True" widget="password"/>
+            </group>
+          </group>
+
+          <group string="Defaults" colspan="2">
+            <group>
+              <field name="trakka_mpesa_account_ref" placeholder="TRAKKA"/>
+            </group>
+            <group>
+              <field name="trakka_mpesa_trans_desc" placeholder="Order Payment"/>
+            </group>
+          </group>
+
+          <separator string="Other Trakka Settings"/>
+          <group>
+            <field name="trakka_require_invoice_before_settlement"/>
+          </group>
+        </sheet>
+
+        <footer>
+          <button string="Save" type="object" name="execute" class="btn-primary"/>
+          <button string="Discard" class="btn-secondary" special="cancel"/>
+        </footer>
+      </form>
+    </field>
+  </record>
+
+  <!-- Action to open our settings form directly -->
+  <record id="action_trakka_mpesa_settings" model="ir.actions.act_window">
+    <field name="name">M-Pesa</field>
+    <field name="type">ir.actions.act_window</field>
+    <field name="res_model">res.config.settings</field>
+    <field name="view_mode">form</field>
+    <field name="view_id" ref="view_res_config_settings_trakka_mpesa"/>
+    <field name="target">current</field>
+    <field name="context">{}</field>
+  </record>
+
+  <!-- Menu: Settings → Trakka → M-Pesa -->
+  <menuitem id="menu_trakka_settings_root"
+            name="Trakka"
+            parent="base.menu_config"
+            sequence="95"
+            groups="base.group_system"/>
+  <menuitem id="menu_trakka_settings_mpesa"
+            name="M-Pesa"
+            parent="menu_trakka_settings_root"
+            action="action_trakka_mpesa_settings"
+            sequence="10"
+            groups="base.group_system"/>
+</odoo>
